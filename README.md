@@ -16,7 +16,7 @@ Second, it solves the "Charging Cradle Loop." If you've ever put your Deck to be
 > [!WARNING]
 > *I am not responsible for you or the decisions you make, so if your Deck, or ROG, or Legion Go, or Microwave, or Tesla implode or stop working properly...*
 >
-> ![]([IMAGE_URL_PLACEHOLDER])
+> ![](./assets/itysl_dk-bud.gif)
 
 ## 🚀 The One-Liner Control Panel
 
