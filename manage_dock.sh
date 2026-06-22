@@ -11,6 +11,7 @@ export CONFIG_FILE="/home/deck/.config/systemd/user-sleep/dock_wake.conf"
 export RUNTIME_SCRIPT="/home/deck/.config/systemd/user-sleep/99_dock_wake_delay.sh"
 export SERVICE_FILE="/home/deck/.config/systemd/user/dock-wake-shield.service"
 export UDEV_PATH="/etc/udev/rules.d/99-dock-hub-wake.rules"
+export SUDO_ERS="/etc/sudoers.d/dock-wake-shield"
 
 # Mute standard library font warning chatter
 zenity() {
@@ -27,12 +28,19 @@ verify_system_password_exists() {
         if passwd -S deck 2>/dev/null | grep -E -q "L|NP"; then
             
             # Explicit, beginner-friendly informational warning block
-            local message_text="<b>⚠️ Administrator Password Required</b>\n\n"
-            message_text="${message_text}It looks like you haven't set up a system password for your Steam Deck yet!\n\n"
-            message_text="${message_text}This utility needs one to securely update system hardware rules (udev) and background services (systemd). SteamOS restricts these actions until a password is built.\n\n"
-            message_text="${message_text}💡 <b>RECOMMENDATION:</b> The most common and standard password for Steam Deck users is simply <b>deck</b>, but you can use whatever you would like—just make sure you remember it!\n\n"
-            message_text="${message_text}🚀 <b>WHAT HAPPENS NEXT:</b> If you choose to proceed, you will be redirected to a standard Konsole window that runs the native Linux <b>'passwd'</b> command.\n\n"
-            message_text="${message_text}🔒 <b>SECURITY NOTE:</b> This configuration utility never saves, transmits, or records your password anywhere. It stays completely local and private to your device."
+            local message_text=$(
+                echo "<b>⚠️ Administrator Password Required</b>"
+                echo ""
+                echo "It looks like you haven't set up a system password for your Steam Deck yet!"
+                echo ""
+                echo "This utility needs one to securely update system hardware rules (udev) and background services (systemd). SteamOS restricts these actions until a password is built."
+                echo ""
+                echo "💡 <b>RECOMMENDATION:</b> The most common and standard password for Steam Deck users is simply <b>deck</b>, but you can use whatever you would like—just make sure you remember it!"
+                echo ""
+                echo "🚀 <b>WHAT HAPPENS NEXT:</b> If you choose to proceed, you will be redirected to a standard Konsole window that runs the native Linux <b>'passwd'</b> command."
+                echo ""
+                echo "🔒 <b>SECURITY NOTE:</b> This configuration utility never saves, transmits, or records your password anywhere. It stays completely local and private to your device."
+            )
 
             local setup_choice=$(zenity --question \
                 --title="Sudo Password Required" \
@@ -141,6 +149,35 @@ EOF
     chmod +x "$desktop_launcher"
 }
 
+execute_with_log() {
+    local window_title="$1"
+    local routine_function="$2"
+
+    # Execute the passed function name and pipe its live echo lines to Zenity
+    $routine_function | zenity --text-info \
+        --title="$window_title" \
+        --width=520 --height=300 \
+        --font_family="monospace" \
+        --auto-scroll
+}
+
+reload_udev_subsystem() {
+    echo "🔄 Refreshing active Linux kernel hardware tracking sub-routines..."
+    echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
+}
+
+query_live_hardware() {
+    # Populates a structured local hardware manifest list from live active USB paths
+    # Output format line string: "VID:PID|Clean Truncated Description"
+    while read -r line; do
+        local vid=$(echo "$line" | awk '{print $6}' | cut -d':' -f1)
+        local pid=$(echo "$line" | awk '{print $6}' | cut -d':' -f2)
+        local raw_desc=$(echo "$line" | cut -d' ' -f7-)
+        local desc="${raw_desc:0:32}"
+        echo "${vid}:${pid}|${desc}"
+    done < <(lsusb | grep -i "hub" | grep -v "root hub")
+}
+
 # ------------------------------------------------------------------------------
 # 2. "BRAIN FART" DETECTION ENGINE (SELF-HEALING SYSTEM DIAGNOSTIC)
 # ------------------------------------------------------------------------------
@@ -195,41 +232,70 @@ show_main_menu() {
             is_installed=true
         fi
 
-        # Compute Hardware Topology and Device State Readouts
-        local total_hubs=0
-        local registered_hubs=0
+        # Compute Two-Tiered Hardware Topology and Device State Readouts
+        local local_total=0
+        local local_registered=0
+        local global_total=0
         local hardware_report=""
 
-        while read -r line; do
-            local vid=$(echo "$line" | awk '{print $6}' | cut -d':' -f1)
-            local pid=$(echo "$line" | awk '{print $6}' | cut -d':' -f2)
-            local hw_id="${vid}:${pid}"
-            local raw_desc=$(echo "$line" | cut -d' ' -f7-)
-            
-            # Cleanly truncate description strings to enforce column integrity
-            local desc="${raw_desc:0:32}"
-            ((total_hubs++))
-
-            if [ "$is_installed" = true ] && [ -f "$CONFIG_FILE" ] && grep -q "$hw_id" "$CONFIG_FILE"; then
-                ((registered_hubs++))
-                formatted_row=$(printf "%-13s %-34s <span foreground='green'>- Registered</span>" "$hw_id" "$desc")
-                hardware_report="${hardware_report}  • ${formatted_row}\n"
-            else
-                formatted_row=$(printf "%-13s %-34s <span foreground='orange'>- Unregistered</span>" "$hw_id" "$desc")
-                hardware_report="${hardware_report}  • ${formatted_row}\n"
-            fi
-        done < <(lsusb | grep -i "hub" | grep -v "root hub")
-
-        # Fallback profile string if layout survey yields nothing connected
-        if [ $total_hubs -eq 0 ]; then
-            hardware_report="  No external hardware docks detected via USB system path."
+        # Step A: Load your Saved Global Registry database mappings into memory
+        local -A registered_hubs_map
+        if [ -f "$CONFIG_FILE" ]; then
+            while read -r entry; do
+                if [[ -n "$entry" && "$entry" != "#"* ]]; then
+                    local reg_id=$(echo "$entry" | cut -d'|' -f1)
+                    local reg_desc=$(echo "$entry" | cut -d'|' -f2)
+                    registered_hubs_map["$reg_id"]="$reg_desc"
+                    ((global_total++))
+                fi
+            done < <(sed -n '/\[MANAGED_HUBS\]/,$p' "$CONFIG_FILE" | tail -n +2)
         fi
 
-        # Audit immutable system-level paths to verify update damage (Three-State Evaluation)
+        # Step B: Scan Live Hardware Layer & Check against the map
+        hardware_report="${hardware_report}<span font_family='monospace' font_size='small'>⚡ LOCAL ACTIVE PLUGS</span>\n"
+        while read -r live_hub; do
+            [ -z "$live_hub" ] && continue
+            local current_id=$(echo "$live_hub" | cut -d'|' -f1)
+            local current_desc=$(echo "$live_hub" | cut -d'|' -f2)
+            ((local_total++))
+
+            local formatted_row=""
+            if [ "$is_installed" = true ] && [ -n "${registered_hubs_map[$current_id]}" ]; then
+                ((local_registered++))
+                # Remove this target from the tracking map so we know what is left over/offline later
+                unset registered_hubs_map["$current_id"]
+                formatted_row=$(printf "%-13s %-34s <span foreground='green'>- Active</span>" "$current_id" "$current_desc")
+                hardware_report="${hardware_report}   • ${formatted_row}\n"
+            else
+                formatted_row=$(printf "%-13s %-34s <span foreground='orange'>- Unregistered</span>" "$current_id" "$current_desc")
+                hardware_report="${hardware_report}   • ${formatted_row}\n"
+            fi
+        done < <(query_live_hardware)
+
+        if [ $local_total -eq 0 ]; then
+            hardware_report="${hardware_report}     No active external USB hubs plugged in.\n"
+        fi
+
+        # Step C: Any keys left over in our map are verified Offline Global Targets
+        hardware_report="${hardware_report}\n<span font_family='monospace' font_size='small'>🌐 ROAMING GLOBAL REGISTRY</span>\n"
+        local offline_count=0
+        for offline_id in "${!registered_hubs_map[@]}"; do
+            local offline_desc="${registered_hubs_map[$offline_id]}"
+            local formatted_row=$(printf "%-13s %-34s <span foreground='blue'>- Disconnected</span>" "$offline_id" "$offline_desc")
+            hardware_report="${hardware_report}   • <span foreground='gray'>${formatted_row}</span>\n"
+            ((offline_count++))
+        done
+
+        if [ $offline_count -eq 0 ] && [ $global_total -eq 0 ]; then
+            hardware_report="${hardware_report}     No roaming profiles built into global registry database yet.\n"
+        elif [ $offline_count -eq 0 ]; then
+            hardware_report="${hardware_report}     All registered global targets are currently online.\n"
+        fi
+
+        # Audit immutable system-level paths to verify update damage
         local udev_status="<span foreground='orange'>- missing / needs repaired</span>"
         local sudo_status="<span foreground='orange'>- missing / needs repaired</span>"
-        
-        [ -f "/etc/sudoers.d/dock-wake-shield" ] && sudo_status="<span foreground='green'>- installed</span>"
+        [ -f "$SUDO_ERS" ] && sudo_status="<span foreground='green'>- installed</span>"
 
         if [ -f "$UDEV_PATH" ]; then
             if grep -q "#Initialized" "$UDEV_PATH"; then
@@ -239,34 +305,35 @@ show_main_menu() {
             fi
         fi
 
-        # Dynamically calculate width alignment spacing for paths based on standard Zenity column boundaries
         local path_width=47
         local formatted_udev_path=$(printf "%-${path_width}s" "$UDEV_PATH")
-        local formatted_sudo_path=$(printf "%-${path_width}s" "/etc/sudoers.d/dock-wake-shield")
+        local formatted_sudo_path=$(printf "%-${path_width}s" "$SUDO_ERS")
 
-        # Generate Main Interface Readout Block (Using compact Pango Markup font blocks)
-        local status_text=""
-        status_text="${status_text}<b>🛡️ SYSTEM STATUS PROFILE</b>\n"
-        status_text="${status_text}────────────────────────────────────────────────────────────\n"
-        status_text="${status_text}  • Guard Time Threshold : ${current_delay} Seconds\n"
-        if [ "$is_installed" = true ]; then
-            status_text="${status_text}  • Monitored Hardware   : ${registered_hubs}/${total_hubs} USB Hub Targets Registered\n"
-        else
-            status_text="${status_text}  • Monitored Hardware   : Core Installation Suite Missing\n"
-        fi
-        status_text="${status_text}────────────────────────────────────────────────────────────\n"
+        # Synthesize Main Interface Readout Block (Using wrapped stream redirection)
+        status_text=$(
+            echo "<b>🛡️ SYSTEM STATUS PROFILE</b>"
+            echo "────────────────────────────────────────────────────────────"
+            echo "  • Guard Time Threshold : ${current_delay} Seconds"
+            if [ "$is_installed" = true ]; then
+                echo "  • Connected Hub Metrics: ${local_registered}/${local_total} Online Targets Guarded"
+                echo "  • Roaming Mesh Capacity: ${local_registered}/${global_total} Active Ecosystem Footprint"
+            else
+                echo "  • Monitored Hardware   : Core Installation Suite Missing"
+            fi
+            echo "────────────────────────────────────────────────────────────"
+            
+            echo "<b>📂 IMMUTABLE SYSTEM OVERLAYS</b>"
+            echo "  • <span font_family='monospace' font_size='small' foreground='gray'>${formatted_udev_path}</span> ${udev_status}"
+            echo "  • <span font_family='monospace' font_size='small' foreground='gray'>${formatted_sudo_path}</span> ${sudo_status}"
+            echo "────────────────────────────────────────────────────────────"
+            echo ""
+            echo "<b>🔌 ECOSYSTEM HARDWARE MONITOR</b>"
+            echo "<span font_family='monospace' font_size='small'>    ID            DEVICE DESCRIPTION                 STATUS</span>"
+            echo "────────────────────────────────────────────────────────────"
+            echo "<span font_family='monospace' font_size='small'>${hardware_report}</span>"
+            echo "────────────────────────────────────────────────────────────"
+        )
         
-        status_text="${status_text}<b>📂 IMMUTABLE SYSTEM OVERLAYS</b>\n"
-        status_text="${status_text}  • <span font_family='monospace' font_size='small' foreground='gray'>${formatted_udev_path}</span> ${udev_status}\n"
-        status_text="${status_text}  • <span font_family='monospace' font_size='small' foreground='gray'>${formatted_sudo_path}</span> ${sudo_status}\n"
-        status_text="${status_text}────────────────────────────────────────────────────────────\n\n"
-
-        status_text="${status_text}<b>🔌 CONNECTED HARDWARE SURVEY</b>\n"
-        status_text="${status_text}<span font_family='monospace' font_size='small'>    ID            DEVICE DESCRIPTION                 STATUS</span>\n"
-        status_text="${status_text}────────────────────────────────────────────────────────────\n"
-        status_text="${status_text}<span font_family='monospace' font_size='small'>${hardware_report}</span>"
-        status_text="${status_text}────────────────────────────────────────────────────────────"
-
         # Create the Dynamic menu options
         local menu_options=()
         if [ "$is_installed" = true ]; then
@@ -291,11 +358,8 @@ show_main_menu() {
 
         case "$CHOICE" in
             "Install Core Utility Suite" | "Update / Repair Utilities")
-                execute_install
+                execute_with_log "Core Suite Setup Engine" run_install_routine
                 [ "$CHOICE" = "Install Core Utility Suite" ] && export FRESHLY_INSTALLED=true
-                if [ "$CHOICE" = "Update / Repair Utilities" ]; then
-                    zenity --info --text="Utility suite successfully verified and repaired!" --timeout=2
-                fi
                 ;;
             *"Scan & Register Hubs")
                 execute_hub_wizard
@@ -304,7 +368,7 @@ show_main_menu() {
                 execute_timer_config
                 ;;
             "Completely Uninstall Suite")
-                execute_uninstall
+                execute_with_log "Core Suite Uninstallation Engine" run_uninstall_routine
                 export FRESHLY_INSTALLED=false
                 ;;
             *)
@@ -317,35 +381,78 @@ show_main_menu() {
 # ------------------------------------------------------------------------------
 # 4. UNDERLYING EXECUTION ENGINES
 # ------------------------------------------------------------------------------
-execute_install() {
+run_install_routine() {
     if [[ "$XYZ" =~ "sleep_wake_delay" ]] || [[ "$0" =~ "sleep_wake_delay" ]]; then
         export REPO_BASE="https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/sleep_wake_delay"
     fi
 
+    echo "📥 Fetching structural application databases from repository..."
     fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
     fetch_repo_asset "99_dock_wake_delay.sh" "$RUNTIME_SCRIPT"
     fetch_repo_asset "dock-wake-shield.service" "$SERVICE_FILE"
-
+    
+    echo "⚙️ Registering user-space systemd automation profiles..."
     systemctl --user daemon-reload
     systemctl --user disable dock-wake-shield.service &>/dev/null
     systemctl --user enable dock-wake-shield.service
     set_config_value "user_sleep_service_installed" "true"
 
+    echo "🔒 Elevating core security access parameters..."
     get_root_credentials
     unlock_system
 
-    # Create the NOPASSWD privilege exception layer cleanly
-    echo "$PASS" | sudo -S tee /etc/sudoers.d/dock-wake-shield > /dev/null <<'EOF'
+    echo "📝 Compiling administrative NOPASSWD bypass exceptions..."
+    echo "$PASS" | sudo -S tee "$SUDO_ERS" > /dev/null <<'EOF'
 deck ALL=(ALL) NOPASSWD: /home/deck/.config/systemd/user-sleep/99_dock_wake_delay.sh
 EOF
 
-    # Dropping the automated initialization handshake text directly into the system rules path
-    echo "#Initialized" | echo "$PASS" | sudo -S tee "$UDEV_PATH" > /dev/null
+    echo "🛠️ Synthesizing clean time-gate hardware structural configurations..."
+    sudo -S tee "$UDEV_PATH" > /dev/null <<< "$PASS" << 'EOF'
+#Initialized
+EOF
     set_config_value "udev_rules_installed" "true"
 
-    echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
+    echo "🔄 Refreshing active Linux kernel hardware tracking sub-routines..."
+    reload_udev_subsystem
     lock_system
+    
+    echo "🚀 Generating application desktop environment shortcuts..."
     create_desktop_launcher
+
+    # 🧹 HOUSE CLEANING CHECK: Detect and replace the standalone installer shortcut
+    local installer_desktop="/home/deck/Desktop/Install_Dock_Wake_Manager.desktop"
+    if [ -f "$installer_desktop" ]; then
+        echo "🧹 Discovered active setup shortcut on Desktop. Cleaning up installer artifacts..."
+        rm -f "$installer_desktop"
+    fi    
+    echo -e "\n✅ Installation routine successfully completed!"
+}
+
+run_uninstall_routine() {
+    echo "🔒 Requesting system administration authorization tokens..."
+    unlock_system
+
+    echo "🗑️ Scrubbing hardware udev configuration rule targets..."
+    echo "$PASS" | sudo -S rm -f "$UDEV_PATH"
+
+    echo "🔄 Purging kernel hardware memory caching profiles..."
+    reload_udev_subsystem
+
+    echo "🗑️ Dropping sudoers privilege exception layers..."
+    echo "$PASS" | sudo -S rm -f "$SUDO_ERS"
+
+    lock_system
+
+    echo "⚙️ De-registering automated background systemd services..."
+    systemctl --user disable dock-wake-shield.service &>/dev/null
+    rm -f "$SERVICE_FILE"
+    systemctl --user daemon-reload
+
+    echo "🧹 Obliterating configuration folders and local tracking databases..."
+    rm -rf "/home/deck/.config/systemd/user-sleep/"
+    rm -f "/home/deck/Desktop/DockWakeManager.desktop"
+    
+    echo -e "\n✅ System environment cleanly restored to factory state!"
 }
 
 execute_timer_config() {
@@ -393,16 +500,17 @@ execute_timer_config() {
 execute_hub_wizard() {
     local usb_list=()
     local raw_hubs=()
+    local -A label_map
     
     usb_list+=( "FALSE" "ALL_HUBS" "[SELECT ALL DISCOVERED DOCK TARGETS]" )
 
-    while read -r line; do
-        local vid=$(echo "$line" | awk '{print $6}' | cut -d':' -f1)
-        local pid=$(echo "$line" | awk '{print $6}' | cut -d':' -f2)
-        local hw_id="${vid}:${pid}"
-        local desc=$(echo "$line" | cut -d' ' -f7-)
+    while read -r live_hub; do
+        [ -z "$live_hub" ] && continue
+        local hw_id=$(echo "$live_hub" | cut -d'|' -f1)
+        local desc=$(echo "$live_hub" | cut -d'|' -f2)
         
         raw_hubs+=("$hw_id")
+        label_map["$hw_id"]="$desc"
 
         local default_state="FALSE"
         if [ -f "$CONFIG_FILE" ] && grep -q "$hw_id" "$CONFIG_FILE"; then
@@ -410,7 +518,7 @@ execute_hub_wizard() {
         fi
 
         usb_list+=( "$default_state" "$hw_id" "$desc" )
-    done < <(lsusb | grep -i "hub" | grep -v "root hub")
+    done < <(query_live_hardware)
 
     if [ ${#usb_list[@]} -le 3 ]; then
         zenity --error --text="No compatible external USB hubs were discovered attached to the Deck."
@@ -443,45 +551,28 @@ execute_hub_wizard() {
         for target in "${final_targets[@]}"; do
             local vid=$(echo "$target" | cut -d':' -f1)
             local pid=$(echo "$target" | cut -d':' -f2)
+            local metadata="${label_map[$target]}"
 
             udev_buffer="${udev_buffer}SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"$vid\", ATTRS{idProduct}==\"$pid\", ATTR{power/wakeup}=\"enabled\""$'\n'
-            echo "$target" >> "$CONFIG_FILE"
+            echo "${target}|${metadata}" >> "$CONFIG_FILE"
             ((count++))
         done
 
-        # Re-write the rules cleanly. If everything was un-checked, it restores the default #Initialized token state
         if [ "$count" -gt 0 ]; then
             echo "$udev_buffer" | echo "$PASS" | sudo -S tee "$UDEV_PATH" > /dev/null
         else
-            echo "#Initialized" | echo "$PASS" | sudo -S tee "$UDEV_PATH" > /dev/null
+            sudo -S tee "$UDEV_PATH" > /dev/null <<< "$PASS" << 'EOF'
+#Initialized
+EOF
         fi
 
         set_config_value "total_managed_hubs" "$count"
         set_config_value "udev_rules_installed" "true"
 
-        echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
+        reload_udev_subsystem
         lock_system
         zenity --info --text="Successfully synchronized tracking matrices ($count active targets)!" --timeout=2
     fi
-}
-
-execute_uninstall() {
-    unlock_system
-
-    echo "$PASS" | sudo -S rm -f "$UDEV_PATH"
-    echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
-    echo "$PASS" | sudo -S rm -f /etc/sudoers.d/dock-wake-shield
-
-    lock_system
-
-    systemctl --user disable dock-wake-shield.service &>/dev/null
-    rm -f "$SERVICE_FILE"
-    systemctl --user daemon-reload
-
-    rm -rf "/home/deck/.config/systemd/user-sleep/"
-    rm -f "/home/deck/Desktop/DockWakeManager.desktop"
-
-    zenity --info --text="All components cleanly purged from the system architecture." --timeout=2
 }
 
 show_main_menu
