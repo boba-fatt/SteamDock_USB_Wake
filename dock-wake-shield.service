@@ -12,4 +12,4 @@ ExecStart=/usr/bin/sudo /home/deck/.config/systemd/user-sleep/99_dock_wake_delay
 ExecStop=/usr/bin/sudo /home/deck/.config/systemd/user-sleep/99_dock_wake_delay.sh post
 
 [Install]
-WantedBy=sleep.target
+WantedBy=default.target
