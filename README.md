@@ -30,10 +30,21 @@ Forget messy terminal commands or confusing text files. This manager features a 
 You don't need any prior Linux experience to get this running. Switch your Steam Deck to **Desktop Mode** and choose the method that makes you most comfortable:
 
 ### Method 1: The Downloadable Shortcut Shortcut (Easiest)
-
-1. **Download:** Click to download the [`Install_Dock_Wake_Manager.desktop`](https://www.google.com/search?q=./assets/Install_Dock_Wake_Manager.desktop) file from the assets folder and save it straight onto your Steam Deck's **Desktop**.
-2. **Enable Permissions:** Right-click the downloaded icon on your desktop, select **Properties**, go to the **Permissions** tab, and check the box that says **"Is executable"**.
-3. **Run:** Double-click the file and click **Execute** (or *Trust* if prompted). The launcher will handle the initial repository asset pull and fire up your control panel instantly!
+```mermaid
+graph TD
+    A([**Download File**]) -->|Save to Desktop| B(**Double-Click File**)
+    B --> C{Does it open & run?}
+    C -->|Yes / Click Execute| D([🚀 Launch Control Panel])
+    C -->|No / Asks what program to use| E[**Enable Permissions** Right-Click Icon -> Properties]
+    E --> F[Go to Permissions Tab]
+    F --> G[Check 'Is executable']
+    G --> H(**Double-Click File** Again)
+    H --> D
+ ```   
+- ***Download:*** Click to download the [`Install_Dock_Wake_Manager.desktop`](https://github.com/boba-fatt/SteamDock_USB_Wake/releases/download/v1.0.1/Install_Dock_Wake_Manager.desktop) file from the latest release and save it straight onto your Steam Deck's **Desktop**.
+- ***Run:*** Double-click the file and click **Execute** (or *Trust* if prompted). The launcher will handle the initial repository asset pull and fire up your control panel instantly!
+- ***Enable Permissions:*** Right-click the downloaded icon on your desktop, select **Properties**, go to the **Permissions** tab, and check the box that says **"Is executable"**.
+- ***Run Again:*** Double-click the file Again and click **Execute** (or *Trust* if prompted).
 
 ### Method 2: The Konsole One-Liner
 
