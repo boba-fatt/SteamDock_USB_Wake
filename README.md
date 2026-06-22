@@ -31,7 +31,14 @@ The script targets external interface bridges while explicitly avoiding internal
    ```
    ./deck_usb_wake_udev_make.sh
    ```
-
+   
+## For the lazy like myself:
+  You can copy this long-@ss one-liner and paste in your terminal and it will do all of the above for you.  I recommend creating a new folder in your Home and then right click to open the terminal from that directory before running this, as it will save the script in directory from which you run the command.
+```bash
+curl -sSL https://tinyurl.com/SteamDockWake -o deck_usb_wake_udev_make.sh && \
+chmod +x deck_usb_wake_udev_make.sh && \
+./deck_usb_wake_udev_make.sh
+```
 ## Execution States:
 
 Create/Wipe: Compiles a fresh slate targeting only currently attached physical hubs.
