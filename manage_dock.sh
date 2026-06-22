@@ -195,17 +195,24 @@ show_main_menu() {
 # 4. UNDERLYING EXECUTION ENGINES
 # ------------------------------------------------------------------------------
 execute_install() {
+    # Dynamically point REPO_BASE to the active branch if testing
+    if [[ "$XYZ" =~ "sleep_wake_delay" ]] || [[ "$0" =~ "sleep_wake_delay" ]]; then
+        export REPO_BASE="https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/sleep_wake_delay"
+    fi
+
     fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
     fetch_repo_asset "99_dock_wake_delay.sh" "$RUNTIME_SCRIPT"
     fetch_repo_asset "dock-wake-shield.service" "$SERVICE_FILE"
 
+    # Self-Healing systemd sequence: Reload, disable old broken state, then force enable
     systemctl --user daemon-reload
+    systemctl --user disable dock-wake-shield.service &>/dev/null
     systemctl --user enable dock-wake-shield.service
     set_config_value "user_sleep_service_installed" "true"
 
     get_root_credentials
-    echo "$PASS" | sudo -S tee /etc/sudoers.d/dock-wake-shield > /dev/null <<EOF
-deck ALL=(ALL) NOPASSWD: $RUNTIME_SCRIPT
+    echo "$PASS" | sudo -S tee /etc/sudoers.d/dock-wake-shield > /dev/null <<'EOF'
+deck ALL=(ALL) NOPASSWD: /home/deck/.config/systemd/user-sleep/99_dock_wake_delay.sh
 EOF
     create_desktop_launcher
 }
