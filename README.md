@@ -53,7 +53,8 @@ This manager handles the system security checks completely safely:
 * **Quick How-do-ya-do:** The script checks if your account has a password. If it doesn't, a friendly window pops up explaining why SteamOS needs one to touch hardware settings.
 * **The Hand-Holding Guide:** It suggests just using a simple standard password like `deck` so you can get moving, then throws you right into a secure terminal window running the native Linux `passwd` utility.
 * 🔒 **The Lockbox Guarantee:** This utility never records, intercepts, logs, or saves your password anywhere. It stays 100% local, private, and sealed within your Deck's built-in Linux security layer.
-  ![Lockbox](.assets/al-gores-lockbox.gif)
+> ![Lockbox](./assets/al-gores-lockbox.gif)
+
 ---
 > [!CAUTION]
 > *The following section is full of nerdy shit I have to kinda put in here, and I am not that great at explaining everything, so I did my best.  I am not a coder or an engineer; I am a dad who has to learn things in order to fix things because not everything is built for us, and I also value my sanity and comfort.*
