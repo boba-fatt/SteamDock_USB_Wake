@@ -12,6 +12,11 @@ export SERVICE_FILE="/home/deck/.config/systemd/user/dock-wake-shield.service"
 export UDEV_PATH="/etc/udev/rules.d/99-dock-hub-wake.rules"
 export REPO_BASE="https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/main"
 
+# mute the chatter
+zenity() {
+    command zenity "$@" 2>/dev/null
+}
+
 # ------------------------------------------------------------------------------
 # 1. STANDARDIZED REUSABLE HELPER FUNCTIONS
 # ------------------------------------------------------------------------------
@@ -209,33 +214,44 @@ execute_timer_config() {
     local current_delay=$(get_config_value "sleep_buffer_seconds")
     [ -z "$current_delay" ] && current_delay=10
 
-    local form_output=$(zenity --forms --title="Configure Sleep Buffer" \
-        --text="Select manual mode or simple slider configuration rules:" \
-        --add-radio="Use Simple Slider (Recommended)" \
-        --add-radio="Use Advanced Manual Input" \
-        --add-scale="Simple Slider Adjust (2 to 30s)" --value="$current_delay" --min-value=2 --max-value=30 --step=1 \
-        --add-entry="Advanced Manual Entry (Up to 120s)" --entry-text="$current_delay")
+    # Step 1: Ask the user to choose a configuration mode cleanly
+    local mode_choice=$(zenity --list --radiolist \
+        --title="Configure Sleep Buffer" \
+        --text="Select your desired configuration method:" \
+        --column="Select" --column="Mode" \
+        TRUE "Simple Slider (Recommended)" \
+        FALSE "Advanced Manual Input" \
+        --height=200 --width=350 --ok-label="Next")
 
-    if [ -n "$form_output" ]; then
-        local use_simple=$(echo "$form_output" | cut -d'|' -f1)
-        local slider_val=$(echo "$form_output" | cut -d'|' -f3)
-        local manual_val=$(echo "$form_output" | cut -d'|' -f4 | xargs)
+    # If the user hits cancel or exits the window
+    [ -z "$mode_choice" ] && return
 
-        local final_value=$current_delay
-        if [ "$use_simple" = "TRUE" ]; then
-            final_value=$slider_val
-        else
-            if [[ "$manual_val" =~ ^[0-9]+$ ]]; then
-                if [ "$manual_val" -gt 120 ]; then
-                    final_value=120
-                    zenity --warning --text="Value exceeded maximum cap. Automatically bound to 120 seconds." --timeout=3
-                elif [ "$manual_val" -lt 2 ]; then
-                    final_value=2
-                else
-                    final_value=$manual_val
-                fi
+    local final_value=$current_delay
+
+    # Step 2: Dynamically open the correct standalone Zenity window
+    if [[ "$mode_choice" == "Simple Slider"* ]]; then
+        final_value=$(zenity --scale --title="Simple Slider Setup" \
+            --text="Adjust sleep shield duration buffer (2 to 30 seconds):" \
+            --value="$current_delay" --min-value=2 --max-value=30 --step=1)
+    else
+        local manual_val=$(zenity --entry --title="Advanced Manual Input" \
+            --text="Type your custom threshold interval (Up to 120s):" \
+            --entry-text="$current_delay")
+        
+        if [[ "$manual_val" =~ ^[0-9]+$ ]]; then
+            if [ "$manual_val" -gt 120 ]; then
+                final_value=120
+                zenity --warning --text="Value exceeded maximum cap. Automatically bound to 120 seconds." --timeout=3
+            elif [ "$manual_val" -lt 2 ]; then
+                final_value=2
+            else
+                final_value=$manual_val
             fi
         fi
+    fi
+
+    # Save the updated parameter if the user didn't cancel out of the sub-windows
+    if [ -n "$final_value" ]; then
         set_config_value "sleep_buffer_seconds" "$final_value"
     fi
 }
