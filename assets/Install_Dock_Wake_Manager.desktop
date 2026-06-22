@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Install Dock Wake Manager
+Comment=One-Click Installer for Steam Deck USB Hub Wake Shields
+Exec=bash -c "curl -sSL https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/sleep_wake_delay/manage_dock.sh -o /tmp/manage_dock.sh && chmod +x /tmp/manage_dock.sh && BRANCH_NAME=sleep_wake_delay /tmp/manage_dock.sh"
+Icon=system-software-update
+Terminal=true
+Type=Application
+Categories=Utility;
