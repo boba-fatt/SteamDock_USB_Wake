@@ -157,13 +157,14 @@ show_main_menu() {
 
             if [ "$is_installed" = true ] && [ -f "$CONFIG_FILE" ] && grep -q "$hw_id" "$CONFIG_FILE"; then
                 ((registered_hubs++))
-                # Monospace padding with green confirmation tags
-                local formatted_row=$(printf "%-11s  %-32s <span foreground='green'>- Registered</span>\n" "$hw_id" "$desc")
-                hardware_report="${hardware_report}${formatted_row}"
+                # Added \n at the very end of the string format rule
+                formatted_row=$(printf "%-11s  %-32s <span foreground='green'>- Registered</span>\n" "$hw_id" "$desc")
+                hardware_report="${hardware_report}${formatted_row}\n"
             else
-                # Monospace padding with orange pending warning tags
-                local formatted_row=$(printf "%-11s  %-32s <span foreground='orange'>- Unregistered</span>\n" "$hw_id" "$desc")
-                hardware_report="${hardware_report}${formatted_row}"
+                ((total_hubs++))
+                # Added \n at the very end of the string format rule
+                formatted_row=$(printf "%-11s  %-32s <span foreground='orange'>- Unregistered</span>\n" "$hw_id" "$desc")
+                hardware_report="${hardware_report}${formatted_row}\n"
             fi
         done < <(lsusb | grep -i "hub" | grep -v "root hub")
 
