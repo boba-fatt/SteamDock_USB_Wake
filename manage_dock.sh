@@ -154,14 +154,22 @@ run_diagnostic() {
 
         if [ -f "$UDEV_PATH" ]; then
             set_config_value "udev_rules_installed" "true"
-            local vids=($(grep -oP 'ATTRS{idVendor}=="\K[^" ]+' "$UDEV_PATH"))
-            local pids=($(grep -oP 'ATTRS{idProduct}=="\K[^" ]+' "$UDEV_PATH"))
+            local vids=($(grep -oP 'ATTRS{idVendor}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
+            local pids=($(grep -oP 'ATTRS{idProduct}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
             local total_hubs=${#vids[@]}
 
-            set_config_value "total_managed_hubs" "$total_hubs"
-            for ((i=0; i<total_hubs; i++)); do
-                sed -i "/\[MANAGED_HUBS\]/a ${vids[$i]}:${pids[$i]}" "$CONFIG_FILE"
-            done
+            # FIXED: Only execute array mapping loop if elements were successfully decoded
+            if [ "$total_hubs" -gt 0 ]; then
+                set_config_value "total_managed_hubs" "$total_hubs"
+                for ((i=0; i<total_hubs; i++)); do
+                    # Double-check validation layer to ensure empty variables don't format string junk
+                    if [ -n "${vids[$i]}" ] && [ -n "${pids[$i]}" ]; then
+                        sed -i "/\[MANAGED_HUBS\]/a ${vids[$i]}:${pids[$i]}" "$CONFIG_FILE"
+                    fi
+                done
+            else
+                set_config_value "total_managed_hubs" "0"
+            fi
         fi
     fi
 
@@ -169,7 +177,6 @@ run_diagnostic() {
         create_desktop_launcher
     fi
 }
-
 # ------------------------------------------------------------------------------
 # 3. INTERACTIVE GUI PIPELINE (PERSISTENT APPLICATION LOOP)
 # ------------------------------------------------------------------------------
@@ -218,19 +225,34 @@ show_main_menu() {
             hardware_report="  No external hardware docks detected via USB system path."
         fi
 
+        # Audit immutable system-level paths to verify update damage
+        local udev_status="<span foreground='orange'>- missing / needs repaired</span>"
+        local sudo_status="<span foreground='orange'>- missing / needs repaired</span>"
+
+        [ -f "$UDEV_PATH" ] && udev_status="<span foreground='green'>- installed</span>"
+        [ -f "/etc/sudoers.d/dock-wake-shield" ] && sudo_status="<span foreground='green'>- installed</span>"
+
         # Generate Main Interface Readout Block (Using Pango Markup font blocks)
         local status_text=""
         status_text="${status_text}<b>🛡️ SYSTEM STATUS PROFILE</b>\n"
         status_text="${status_text}────────────────────────────────────────────────────────────\n"
-        status_text="${status_text}  • Shield Sleep Delay : ${current_delay} Seconds\n"
+        status_text="${status_text}  • Guard Time Threshold : ${current_delay} Seconds\n"
         if [ "$is_installed" = true ]; then
-            status_text="${status_text}  • Monitored Hardware : ${registered_hubs}/${total_hubs} USB Hub Targets Registered\n"
+            status_text="${status_text}  • Monitored Hardware   : ${registered_hubs}/${total_hubs} USB Hub Targets Registered\n"
         else
-            status_text="${status_text}  • Monitored Hardware : Core Installation Suite Missing\n"
+            status_text="${status_text}  • Monitored Hardware   : Core Installation Suite Missing\n"
         fi
         status_text="${status_text}────────────────────────────────────────────────────────────\n\n"
+
+        status_text="${status_text}<b>📂 IMMUTABLE SYSTEM OVERLAYS</b>\n"
+        status_text="${status_text}  • udev rules : $udev_status\n"
+        status_text="${status_text}    <span font_size='small' foreground='gray'>$UDEV_PATH</span>\n"
+        status_text="${status_text}  • sudo privs : $sudo_status\n"
+        status_text="${status_text}    <span font_size='small' foreground='gray'>/etc/sudoers.d/dock-wake-shield</span>\n"
+        status_text="${status_text}────────────────────────────────────────────────────────────\n\n"
+
         status_text="${status_text}<b>🔌 CONNECTED HARDWARE SURVEY</b>\n"
-        status_text="${status_text}<span font_family='monospace'>ID           DEVICE DESCRIPTION                STATUS</span>\n"
+        status_text="${status_text}<span font_family='monospace'>ID            DEVICE DESCRIPTION                STATUS</span>\n"
         status_text="${status_text}────────────────────────────────────────────────────────────\n"
         status_text="${status_text}<span font_family='monospace'>${hardware_report}</span>\n"
         status_text="${status_text}────────────────────────────────────────────────────────────"
@@ -310,32 +332,34 @@ execute_timer_config() {
     [ -z "$current_delay" ] && current_delay=10
 
     local mode_choice=$(zenity --list --radiolist \
-        --title="Configure Sleep Buffer" \
-        --text="Select your desired configuration method:" \
+        --title="Configure Guard Threshold" \
+        --text="Select your desired configuration method:\n\n💡 <b>NOTE:</b> To completely turn off the shield protection layer, set this value to <b>0</b>." \
         --column="Select" --column="Mode" \
         TRUE "Simple Slider (Recommended)" \
         FALSE "Advanced Manual Input" \
-        --height=200 --width=350 --ok-label="Next")
+        --height=230 --width=380 --ok-label="Next")
 
     [ -z "$mode_choice" ] && return
 
     local final_value=$current_delay
 
     if [[ "$mode_choice" == "Simple Slider"* ]]; then
+        # Min-value lowered to 0 to support complete toggle off state
         final_value=$(zenity --scale --title="Simple Slider Setup" \
-            --text="Adjust sleep shield duration buffer (2 to 30 seconds):" \
-            --value="$current_delay" --min-value=2 --max-value=30 --step=1)
+            --text="Adjust shield guard threshold duration (0 to 30 seconds):\n\n(Set to 0 to completely disable the time-gate shield)" \
+            --value="$current_delay" --min-value=0 --max-value=30 --step=1)
     else
+        # Manual message adjusted to explicitly prompt for 0-120 ranges
         local manual_val=$(zenity --entry --title="Advanced Manual Input" \
-            --text="Type your custom threshold interval (Up to 120s):" \
+            --text="Type your custom guard interval in seconds (0 to 120s):\n\n(Type 0 to completely disable the time-gate shield)" \
             --entry-text="$current_delay")
-        
+
         if [[ "$manual_val" =~ ^[0-9]+$ ]]; then
             if [ "$manual_val" -gt 120 ]; then
                 final_value=120
                 zenity --warning --text="Value exceeded maximum cap. Automatically bound to 120 seconds." --timeout=3
-            elif [ "$manual_val" -lt 2 ]; then
-                final_value=2
+            elif [ "$manual_val" -lt 0 ]; then
+                final_value=0
             else
                 final_value=$manual_val
             fi
@@ -423,16 +447,28 @@ execute_hub_wizard() {
 }
 
 execute_uninstall() {
+    # 1. Elevate and completely scrub system-space overlays
     unlock_system
+
+    # Force delete the explicit udev path and any stray temporary rule modifications
     echo "$PASS" | sudo -S rm -f "$UDEV_PATH"
+
+    # Reload the engine while clean to ensure SteamOS drops the memory tracking hooks
     echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
+
+    # Purge the security privilege bypass rule completely
+    echo "$PASS" | sudo -S rm -f /etc/sudoers.d/dock-wake-shield
+
+    # Re-engage the native immutable read-only system protections safely
     lock_system
 
+    # 2. Clean up user-space systemd configurations
     systemctl --user disable dock-wake-shield.service &>/dev/null
     rm -f "$SERVICE_FILE"
     systemctl --user daemon-reload
 
-    echo "$PASS" | sudo -S rm -f /etc/sudoers.d/dock-wake-shield
+    # 3. Purge configuration databases, runtime artifacts, and desktop hooks
+    # Deletes your settings, the executable daemon script, and the bedtime timestamp log
     rm -rf "/home/deck/.config/systemd/user-sleep/"
     rm -f "/home/deck/Desktop/DockWakeManager.desktop"
 
