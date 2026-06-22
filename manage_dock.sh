@@ -16,12 +16,37 @@ export REPO_BASE="https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake
 # 1. STANDARDIZED REUSABLE HELPER FUNCTIONS
 # ------------------------------------------------------------------------------
 
+get_root_credentials() {
+    # If we are already root, skip the popup completely
+    if [ "$EUID" -ne 0 ] && [ -z "$PASS" ]; then
+        if command -v zenity &> /dev/null; then
+            PASS=$(zenity --password --title="Authentication Required" --text="SteamOS Dock Wake Utility needs administrator privileges to update udev rules.")
+            
+            if [ -z "$PASS" ]; then
+                zenity --error --text="Installation cancelled. Administrator privileges are required."
+                exit 1
+            fi
+            
+            # Pipe the password into sudo to verify it before continuing
+            echo "$PASS" | sudo -S -v &>/dev/null
+            if [ $? -ne 0 ]; then
+                zenity --error --text="Incorrect password. Please run the script again."
+                exit 1
+            fi
+        else
+            sudo -v || exit 1
+        fi
+    fi
+}
+
 unlock_system() {
-    sudo steamos-readonly disable
+    get_root_credentials
+    echo "$PASS" | sudo -S steamos-readonly disable &>/dev/null
 }
 
 lock_system() {
-    sudo steamos-readonly enable
+    get_root_credentials
+    echo "$PASS" | sudo -S steamos-readonly enable &>/dev/null
 }
 
 get_config_value() {
@@ -55,7 +80,7 @@ fetch_repo_asset() {
 
 create_desktop_launcher() {
     local desktop_launcher="/home/deck/Desktop/DockWakeManager.desktop"
-    cat << EOF > "$desktop_launcher"
+    cat << 'EOF' > "$desktop_launcher"
 [Desktop Entry]
 Name=Dock Wake Manager
 Comment=Manage Steam Deck USB Hub Wake and Sleep Shields
@@ -173,7 +198,10 @@ execute_install() {
     systemctl --user enable dock-wake-shield.service
     set_config_value "user_sleep_service_installed" "true"
 
-    echo "deck ALL=(ALL) NOPASSWD: $RUNTIME_SCRIPT" | sudo tee /etc/sudoers.d/dock-wake-shield > /dev/null
+    get_root_credentials
+    echo "$PASS" | sudo -S tee /etc/sudoers.d/dock-wake-shield > /dev/null <<EOF
+deck ALL=(ALL) NOPASSWD: $RUNTIME_SCRIPT
+EOF
     create_desktop_launcher
 }
 
@@ -233,24 +261,28 @@ execute_hub_wizard() {
 
     if [ -n "$chosen_hubs" ]; then
         unlock_system
-        rm -f "$UDEV_PATH"
+        echo "$PASS" | sudo -S rm -f "$UDEV_PATH"
         sed -i '/\[MANAGED_HUBS\]/q' "$CONFIG_FILE"
 
         local IFS='|'
         local count=0
+        local udev_buffer=""
+        
         for entry in $chosen_hubs; do
             local vid=$(echo "$entry" | cut -d':' -f1)
             local pid=$(echo "$entry" | cut -d':' -f2)
 
-            echo "SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"$vid\", ATTRS{idProduct}==\"$pid\", ATTR{power/wakeup}=\"enabled\"" >> "$UDEV_PATH"
+            udev_buffer="${udev_buffer}SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"$vid\", ATTRS{idProduct}==\"$pid\", ATTR{power/wakeup}=\"enabled\""$'\n'
             echo "$entry" >> "$CONFIG_FILE"
             ((count++))
         done
 
+        echo "$udev_buffer" | echo "$PASS" | sudo -S tee "$UDEV_PATH" > /dev/null
+
         set_config_value "total_managed_hubs" "$count"
         set_config_value "udev_rules_installed" "true"
 
-        sudo udevadm control --reload-rules && sudo udevadm trigger
+        echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
         lock_system
         zenity --info --text="Successfully registered $count dock tracking vectors!" --timeout=2
     fi
@@ -258,15 +290,15 @@ execute_hub_wizard() {
 
 execute_uninstall() {
     unlock_system
-    rm -f "$UDEV_PATH"
-    sudo udevadm control --reload-rules && sudo udevadm trigger
+    echo "$PASS" | sudo -S rm -f "$UDEV_PATH"
+    echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
     lock_system
 
     systemctl --user disable dock-wake-shield.service &>/dev/null
     rm -f "$SERVICE_FILE"
     systemctl --user daemon-reload
 
-    sudo rm -f /etc/sudoers.d/dock-wake-shield
+    echo "$PASS" | sudo -S rm -f /etc/sudoers.d/dock-wake-shield
     rm -rf "/home/deck/.config/systemd/user-sleep/"
     rm -f "/home/deck/Desktop/DockWakeManager.desktop"
 
