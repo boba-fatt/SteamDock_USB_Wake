@@ -36,7 +36,7 @@ You don't need any prior Linux experience to get this running. Switch your Steam
 ### Method 2: The Konsole One-Liner
 If you prefer using the terminal, pop open `Konsole` and execute this single command:
 ```bash
-curl -sSL [https://bit.ly/3QZbWWh](https://bit.ly/3QZbWWh) -o /tmp/manage_dock.sh && chmod +x /tmp/manage_dock.sh && /tmp/manage_dock.sh
+curl -sSL https://bit.ly/3QZbWWh -o /tmp/manage_dock.sh && chmod +x /tmp/manage_dock.sh && /tmp/manage_dock.sh
 ```
 
 🔑 "Not Everyone Knows How to Do Everything!" (Safe Password Setup)
