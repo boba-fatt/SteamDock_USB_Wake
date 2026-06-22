@@ -1,0 +1,15 @@
+[Unit]
+Description=Steam Deck Dock Wake Delay Shield
+Before=sleep.target
+StopWhenUnneeded=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Intercepts the transition into sleep mode
+ExecStart=/usr/bin/sudo /home/deck/.config/systemd/user-sleep/99_dock_wake_delay.sh pre
+# Intercepts the transition coming out of sleep mode
+ExecStop=/usr/bin/sudo /home/deck/.config/systemd/user-sleep/99_dock_wake_delay.sh post
+
+[Install]
+WantedBy=default.target
