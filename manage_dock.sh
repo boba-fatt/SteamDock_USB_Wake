@@ -5,12 +5,13 @@
 # Author:       boba-fatt
 # Repository:   https://github.com/boba-fatt/SteamDock_USB_Wake
 # ==============================================================================
-
+export TARGET_BRANCH="${BRANCH_NAME:-main}"
+export REPO_BASE="https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/${TARGET_BRANCH}"
 export CONFIG_FILE="/home/deck/.config/systemd/user-sleep/dock_wake.conf"
 export RUNTIME_SCRIPT="/home/deck/.config/systemd/user-sleep/99_dock_wake_delay.sh"
 export SERVICE_FILE="/home/deck/.config/systemd/user/dock-wake-shield.service"
 export UDEV_PATH="/etc/udev/rules.d/99-dock-hub-wake.rules"
-export REPO_BASE="https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/main"
+
 
 # mute the chatter
 zenity() {
