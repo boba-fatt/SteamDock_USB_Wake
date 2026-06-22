@@ -153,22 +153,25 @@ run_diagnostic() {
         fi
 
         if [ -f "$UDEV_PATH" ]; then
-            set_config_value "udev_rules_installed" "true"
-            local vids=($(grep -oP 'ATTRS{idVendor}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
-            local pids=($(grep -oP 'ATTRS{idProduct}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
-            local total_hubs=${#vids[@]}
-
-            # FIXED: Only execute array mapping loop if elements were successfully decoded
-            if [ "$total_hubs" -gt 0 ]; then
-                set_config_value "total_managed_hubs" "$total_hubs"
-                for ((i=0; i<total_hubs; i++)); do
-                    # Double-check validation layer to ensure empty variables don't format string junk
-                    if [ -n "${vids[$i]}" ] && [ -n "${pids[$i]}" ]; then
-                        sed -i "/\[MANAGED_HUBS\]/a ${vids[$i]}:${pids[$i]}" "$CONFIG_FILE"
-                    fi
-                done
-            else
+            if grep -q "#Initialized" "$UDEV_PATH"; then
+                set_config_value "udev_rules_installed" "true"
                 set_config_value "total_managed_hubs" "0"
+            else
+                set_config_value "udev_rules_installed" "true"
+                local vids=($(grep -oP 'ATTRS{idVendor}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
+                local pids=($(grep -oP 'ATTRS{idProduct}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
+                local total_hubs=${#vids[@]}
+
+                if [ "$total_hubs" -gt 0 ]; then
+                    set_config_value "total_managed_hubs" "$total_hubs"
+                    for ((i=0; i<total_hubs; i++)); do
+                        if [ -n "${vids[$i]}" ] && [ -n "${pids[$i]}" ]; then
+                            sed -i "/\[MANAGED_HUBS\]/a ${vids[$i]}:${pids[$i]}" "$CONFIG_FILE"
+                        fi
+                    done
+                else
+                    set_config_value "total_managed_hubs" "0"
+                fi
             fi
         fi
     fi
@@ -209,14 +212,11 @@ show_main_menu() {
 
             if [ "$is_installed" = true ] && [ -f "$CONFIG_FILE" ] && grep -q "$hw_id" "$CONFIG_FILE"; then
                 ((registered_hubs++))
-                # Added \n at the very end of the string format rule
-                formatted_row=$(printf "%-11s  %-32s <span foreground='green'>- Registered</span>\n" "$hw_id" "$desc")
-                hardware_report="${hardware_report}${formatted_row}\n"
+                formatted_row=$(printf "%-13s %-34s <span foreground='green'>- Registered</span>" "$hw_id" "$desc")
+                hardware_report="${hardware_report}  • ${formatted_row}\n"
             else
-                ((total_hubs++))
-                # Added \n at the very end of the string format rule
-                formatted_row=$(printf "%-11s  %-32s <span foreground='orange'>- Unregistered</span>\n" "$hw_id" "$desc")
-                hardware_report="${hardware_report}${formatted_row}\n"
+                formatted_row=$(printf "%-13s %-34s <span foreground='orange'>- Unregistered</span>" "$hw_id" "$desc")
+                hardware_report="${hardware_report}  • ${formatted_row}\n"
             fi
         done < <(lsusb | grep -i "hub" | grep -v "root hub")
 
@@ -225,12 +225,24 @@ show_main_menu() {
             hardware_report="  No external hardware docks detected via USB system path."
         fi
 
-        # Audit immutable system-level paths to verify update damage
+        # Audit immutable system-level paths to verify update damage (Three-State Evaluation)
         local udev_status="<span foreground='orange'>- missing / needs repaired</span>"
         local sudo_status="<span foreground='orange'>- missing / needs repaired</span>"
         
-        [ -f "$UDEV_PATH" ] && udev_status="<span foreground='green'>- installed</span>"
         [ -f "/etc/sudoers.d/dock-wake-shield" ] && sudo_status="<span foreground='green'>- installed</span>"
+
+        if [ -f "$UDEV_PATH" ]; then
+            if grep -q "#Initialized" "$UDEV_PATH"; then
+                udev_status="<span foreground='yellow'>- no hubs registered yet</span>"
+            else
+                udev_status="<span foreground='green'>- installed</span>"
+            fi
+        fi
+
+        # Dynamically calculate width alignment spacing for paths based on standard Zenity column boundaries
+        local path_width=47
+        local formatted_udev_path=$(printf "%-${path_width}s" "$UDEV_PATH")
+        local formatted_sudo_path=$(printf "%-${path_width}s" "/etc/sudoers.d/dock-wake-shield")
 
         # Generate Main Interface Readout Block (Using compact Pango Markup font blocks)
         local status_text=""
@@ -245,17 +257,17 @@ show_main_menu() {
         status_text="${status_text}────────────────────────────────────────────────────────────\n"
         
         status_text="${status_text}<b>📂 IMMUTABLE SYSTEM OVERLAYS</b>\n"
-        status_text="${status_text}  • <span font_family='monospace' font_size='small' foreground='gray'>$UDEV_PATH</span> $udev_status\n"
-        status_text="${status_text}  • <span font_family='monospace' font_size='small' foreground='gray'>/etc/sudoers.d/dock-wake-shield</span> $sudo_status\n"
-        status_text="${status_text}────────────────────────────────────────────────────────────\n"
+        status_text="${status_text}  • <span font_family='monospace' font_size='small' foreground='gray'>${formatted_udev_path}</span> ${udev_status}\n"
+        status_text="${status_text}  • <span font_family='monospace' font_size='small' foreground='gray'>${formatted_sudo_path}</span> ${sudo_status}\n"
+        status_text="${status_text}────────────────────────────────────────────────────────────\n\n"
 
         status_text="${status_text}<b>🔌 CONNECTED HARDWARE SURVEY</b>\n"
-        status_text="${status_text}<span font_family='monospace' font_size='small'>ID            DEVICE DESCRIPTION                STATUS</span>\n"
+        status_text="${status_text}<span font_family='monospace' font_size='small'>    ID            DEVICE DESCRIPTION                 STATUS</span>\n"
         status_text="${status_text}────────────────────────────────────────────────────────────\n"
-        status_text="${status_text}<span font_family='monospace' font_size='small'>${hardware_report}</span>\n"
+        status_text="${status_text}<span font_family='monospace' font_size='small'>${hardware_report}</span>"
         status_text="${status_text}────────────────────────────────────────────────────────────"
 
-        # Create the Dyamic menu options
+        # Create the Dynamic menu options
         local menu_options=()
         if [ "$is_installed" = true ]; then
             if [ "$FRESHLY_INSTALLED" = true ]; then
@@ -271,7 +283,7 @@ show_main_menu() {
             --title="Steam Deck Dock Wake Manager" \
             --text="$status_text" \
             --column="Available Action Routines" "${menu_options[@]}" \
-            --height=600 --width=540 \
+            --height=600 --width=620 \
             --ok-label="Execute" --cancel-label="Exit Application")
 
         # If user closes window or hits Cancel, cleanly exit the background thread
@@ -320,9 +332,19 @@ execute_install() {
     set_config_value "user_sleep_service_installed" "true"
 
     get_root_credentials
+    unlock_system
+
+    # Create the NOPASSWD privilege exception layer cleanly
     echo "$PASS" | sudo -S tee /etc/sudoers.d/dock-wake-shield > /dev/null <<'EOF'
 deck ALL=(ALL) NOPASSWD: /home/deck/.config/systemd/user-sleep/99_dock_wake_delay.sh
 EOF
+
+    # Dropping the automated initialization handshake text directly into the system rules path
+    echo "#Initialized" | echo "$PASS" | sudo -S tee "$UDEV_PATH" > /dev/null
+    set_config_value "udev_rules_installed" "true"
+
+    echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
+    lock_system
     create_desktop_launcher
 }
 
@@ -343,12 +365,10 @@ execute_timer_config() {
     local final_value=$current_delay
 
     if [[ "$mode_choice" == "Simple Slider"* ]]; then
-        # Min-value lowered to 0 to support complete toggle off state
         final_value=$(zenity --scale --title="Simple Slider Setup" \
             --text="Adjust shield guard threshold duration (0 to 30 seconds):\n\n(Set to 0 to completely disable the time-gate shield)" \
             --value="$current_delay" --min-value=0 --max-value=30 --step=1)
     else
-        # Manual message adjusted to explicitly prompt for 0-120 ranges
         local manual_val=$(zenity --entry --title="Advanced Manual Input" \
             --text="Type your custom guard interval in seconds (0 to 120s):\n\n(Type 0 to completely disable the time-gate shield)" \
             --entry-text="$current_delay")
@@ -374,7 +394,6 @@ execute_hub_wizard() {
     local usb_list=()
     local raw_hubs=()
     
-    # Inject the global select action entry at index row 0
     usb_list+=( "FALSE" "ALL_HUBS" "[SELECT ALL DISCOVERED DOCK TARGETS]" )
 
     while read -r line; do
@@ -385,7 +404,6 @@ execute_hub_wizard() {
         
         raw_hubs+=("$hw_id")
 
-        # Persistence Recovery Layer: Auto-check items matching config database
         local default_state="FALSE"
         if [ -f "$CONFIG_FILE" ] && grep -q "$hw_id" "$CONFIG_FILE"; then
             default_state="TRUE"
@@ -404,7 +422,6 @@ execute_hub_wizard() {
         --column="Monitor" --column="Hardware ID" --column="Device Description" \
         "${usb_list[@]}" --height=400 --width=540)
 
-    # State Reconciliation Phase (Triggers on explicit selections or unchecked drop events)
     if [ -n "$chosen_hubs" ]; then
         unlock_system
         echo "$PASS" | sudo -S rm -f "$UDEV_PATH"
@@ -415,7 +432,6 @@ execute_hub_wizard() {
         local udev_buffer=""
         local final_targets=()
 
-        # Handle the comprehensive Select All capture hook
         if [[ "$chosen_hubs" == *"ALL_HUBS"* ]]; then
             final_targets=("${raw_hubs[@]}")
         else
@@ -424,7 +440,6 @@ execute_hub_wizard() {
             done
         fi
 
-        # Sync loop across verified targets (unselected elements are dropped out entirely)
         for target in "${final_targets[@]}"; do
             local vid=$(echo "$target" | cut -d':' -f1)
             local pid=$(echo "$target" | cut -d':' -f2)
@@ -434,7 +449,12 @@ execute_hub_wizard() {
             ((count++))
         done
 
-        echo "$udev_buffer" | echo "$PASS" | sudo -S tee "$UDEV_PATH" > /dev/null
+        # Re-write the rules cleanly. If everything was un-checked, it restores the default #Initialized token state
+        if [ "$count" -gt 0 ]; then
+            echo "$udev_buffer" | echo "$PASS" | sudo -S tee "$UDEV_PATH" > /dev/null
+        else
+            echo "#Initialized" | echo "$PASS" | sudo -S tee "$UDEV_PATH" > /dev/null
+        fi
 
         set_config_value "total_managed_hubs" "$count"
         set_config_value "udev_rules_installed" "true"
@@ -446,28 +466,18 @@ execute_hub_wizard() {
 }
 
 execute_uninstall() {
-    # 1. Elevate and completely scrub system-space overlays
     unlock_system
 
-    # Force delete the explicit udev path and any stray temporary rule modifications
     echo "$PASS" | sudo -S rm -f "$UDEV_PATH"
-
-    # Reload the engine while clean to ensure SteamOS drops the memory tracking hooks
     echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
-
-    # Purge the security privilege bypass rule completely
     echo "$PASS" | sudo -S rm -f /etc/sudoers.d/dock-wake-shield
 
-    # Re-engage the native immutable read-only system protections safely
     lock_system
 
-    # 2. Clean up user-space systemd configurations
     systemctl --user disable dock-wake-shield.service &>/dev/null
     rm -f "$SERVICE_FILE"
     systemctl --user daemon-reload
 
-    # 3. Purge configuration databases, runtime artifacts, and desktop hooks
-    # Deletes your settings, the executable daemon script, and the bedtime timestamp log
     rm -rf "/home/deck/.config/systemd/user-sleep/"
     rm -f "/home/deck/Desktop/DockWakeManager.desktop"
 
