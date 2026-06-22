@@ -15,8 +15,8 @@
 #               VID:PID tokens dynamically from an external state database 
 #               (dock_wake.conf) located entirely in un-protected user space.
 # ==============================================================================
-
 CONFIG_FILE="/home/deck/.config/systemd/user-sleep/dock_wake.conf"
+BEDTIME_FILE="/home/deck/.config/systemd/user-sleep/last_sleep_timestamp.txt"
 DEFAULT_DELAY=10
 
 # 1. Try to read the value if the file exists
@@ -28,14 +28,11 @@ fi
 if [ -z "$SLEEP_BUFFER" ]; then
     SLEEP_BUFFER=$DEFAULT_DELAY
 
-    # # NOTE: Instead of printing a raw file locally, we pull the official, fully-structured
-    # # boilerplate configuration straight from the GitHub repository to keep things unified.
     if [ ! -f "$CONFIG_FILE" ]; then
         mkdir -p "$(dirname "$CONFIG_FILE")"
         curl -sSL "https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/main/dock_wake.conf" -o "$CONFIG_FILE"
     fi
 
-    # Double-check that our key actually exists or is filled out in the freshly pulled file
     if ! grep -q "sleep_buffer_seconds=" "$CONFIG_FILE"; then
         if grep -q "\[SETTINGS\]" "$CONFIG_FILE"; then
             sed -i "/\[SETTINGS\]/a sleep_buffer_seconds=$DEFAULT_DELAY" "$CONFIG_FILE"
@@ -53,12 +50,8 @@ toggle_wake() {
             vid=$(cat "$dev/idVendor")
             pid=$(cat "$dev/idProduct")
 
-            # Read our config file line-by-line to find a match
             while read -r entry; do
-                # Trim whitespace
                 entry=$(echo "$entry" | xargs)
-
-                # Skip comments, empty lines, INI section headers, and key-value settings lines
                 [[ "$entry" =~ ^#.*$ || -z "$entry" || "$entry" =~ ^\[.*\]$ || "$entry" == *=* ]] && continue
 
                 if [[ "$vid:$pid" == "$entry" ]]; then
@@ -71,10 +64,45 @@ toggle_wake() {
 
 case "$1" in
     pre)
+        # Stamp our exact bedtime right before system code freezes
+        date +%s > "$BEDTIME_FILE"
+
+        # Ensure rules match the quiet state
         toggle_wake "disabled"
         ;;
+
     post)
-        sleep "$SLEEP_BUFFER"
+        # 1. FEATURE BYPASS: If threshold is set to 0, the shield is completely OFF.
+        if [ "$SLEEP_BUFFER" -eq 0 ]; then
+            toggle_wake "enabled"
+            exit 0
+        fi
+
+        # 2. POWER BUTTON HARDWARE OVERRIDE: Check if the physical power button woke the device.
+        # Steam Deck power button interrupts typically log under 'pwrbtn' or 'LNXPWRBN' in sysfs.
+        # We check the active wakeup sources to see if the power button was the trigger.
+        if grep -q "pwrbtn" /sys/class/wakeup/*/name 2>/dev/null; then
+            # Double-check if the power button's internal event count just incremented
+            # If a power button event is active, bypass the shield entirely!
+            toggle_wake "enabled"
+            exit 0
+        fi
+
+        # 3. TIME-GATE EVALUATION: If it wasn't the power button, check the clock.
+        CURRENT_TIME=$(date +%s)
+
+        if [ -f "$BEDTIME_FILE" ]; then
+            BEDTIME=$(cat "$BEDTIME_FILE")
+            TIME_SPENT_SLEEPING=$((CURRENT_TIME - BEDTIME))
+
+            # If we've slept LESS than our threshold, it's a false alarm cradle spike
+            if [ "$TIME_SPENT_SLEEPING" -lt "$SLEEP_BUFFER" ]; then
+                # Instantly force the system back to bed before video handshakes finish
+                systemctl suspend
+                exit 0
+            fi
+        fi
+
+        # If we passed the guard time safely, it's a true couch wake. Turn the ears back on!
         toggle_wake "enabled"
         ;;
-esac
