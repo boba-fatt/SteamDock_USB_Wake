@@ -228,11 +228,11 @@ show_main_menu() {
         # Audit immutable system-level paths to verify update damage
         local udev_status="<span foreground='orange'>- missing / needs repaired</span>"
         local sudo_status="<span foreground='orange'>- missing / needs repaired</span>"
-
+        
         [ -f "$UDEV_PATH" ] && udev_status="<span foreground='green'>- installed</span>"
         [ -f "/etc/sudoers.d/dock-wake-shield" ] && sudo_status="<span foreground='green'>- installed</span>"
 
-        # Generate Main Interface Readout Block (Using Pango Markup font blocks)
+        # Generate Main Interface Readout Block (Using compact Pango Markup font blocks)
         local status_text=""
         status_text="${status_text}<b>🛡️ SYSTEM STATUS PROFILE</b>\n"
         status_text="${status_text}────────────────────────────────────────────────────────────\n"
@@ -242,21 +242,20 @@ show_main_menu() {
         else
             status_text="${status_text}  • Monitored Hardware   : Core Installation Suite Missing\n"
         fi
-        status_text="${status_text}────────────────────────────────────────────────────────────\n\n"
-
+        status_text="${status_text}────────────────────────────────────────────────────────────\n"
+        
         status_text="${status_text}<b>📂 IMMUTABLE SYSTEM OVERLAYS</b>\n"
-        status_text="${status_text}  • udev rules : $udev_status\n"
-        status_text="${status_text}    <span font_size='small' foreground='gray'>$UDEV_PATH</span>\n"
-        status_text="${status_text}  • sudo privs : $sudo_status\n"
-        status_text="${status_text}    <span font_size='small' foreground='gray'>/etc/sudoers.d/dock-wake-shield</span>\n"
+        status_text="${status_text}  • <span font_family='monospace' font_size='small' foreground='gray'>$UDEV_PATH</span> $udev_status\n"
+        status_text="${status_text}  • <span font_family='monospace' font_size='small' foreground='gray'>/etc/sudoers.d/dock-wake-shield</span> $sudo_status\n"
         status_text="${status_text}────────────────────────────────────────────────────────────\n\n"
 
         status_text="${status_text}<b>🔌 CONNECTED HARDWARE SURVEY</b>\n"
-        status_text="${status_text}<span font_family='monospace'>ID            DEVICE DESCRIPTION                STATUS</span>\n"
+        status_text="${status_text}<span font_family='monospace' font_size='small'>ID            DEVICE DESCRIPTION                STATUS</span>\n"
         status_text="${status_text}────────────────────────────────────────────────────────────\n"
-        status_text="${status_text}<span font_family='monospace'>${hardware_report}</span>\n"
+        status_text="${status_text}<span font_family='monospace' font_size='small'>${hardware_report}</span>\n"
         status_text="${status_text}────────────────────────────────────────────────────────────"
 
+        # Create the Dyamic menu options
         local menu_options=()
         if [ "$is_installed" = true ]; then
             if [ "$FRESHLY_INSTALLED" = true ]; then
