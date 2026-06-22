@@ -1,5 +1,20 @@
 #!/usr/bin/env bash
-# SteamOS User-Space Dock Wake Delay Shield
+# ==============================================================================
+# Script Name:  99_dock_wake_delay.sh
+# Description:  SteamOS User-Space Dock Wake Delay Shield
+# Author:       boba-fatt
+# Repository:   https://github.com/boba-fatt/SteamDock_USB_Wake
+#
+# Purpose:      Intercepts system sleep/wake states via systemd to temporarily
+#               mute USB hub wakeup vectors. This blocks electrical surges 
+#               (like docking a controller to a charging cradle or not being 
+#               fast enough when turning off a controller) from triggering 
+#               accidental, immediate wake loops.
+#
+# Mechanics:    Reads customizable sleep buffers and targeted hardware profile 
+#               VID:PID tokens dynamically from an external state database 
+#               (dock_wake.conf) located entirely in un-protected user space.
+# ==============================================================================
 
 CONFIG_FILE="/home/deck/.config/systemd/user-sleep/dock_wake.conf"
 DEFAULT_DELAY=10
