@@ -23,7 +23,7 @@ Second, it solves the "Charging Cradle Loop." If you've ever put your Deck to be
 Whether you're installing this for the very first time, adjusting your timer, or running a repair because a major SteamOS update decided to remodel your system partition, switch to **Desktop Mode**, open up `Konsole`, and fire off this single command:
 
 ``` bash
-curl -sSL https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/main/manage_dock.sh -o /tmp/manage_dock.sh && chmod +x /tmp/manage_dock.sh && /tmp/manage_dock.sh
+curl -sSL https://bit.ly/3QZbWWh -o /tmp/manage_dock.sh && chmod +x /tmp/manage_dock.sh && /tmp/manage_dock.sh
 ```
 
 ---
