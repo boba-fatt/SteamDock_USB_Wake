@@ -29,9 +29,11 @@ Forget messy terminal commands or confusing text files. This manager features a 
 You don't need any prior Linux experience to get this running. Switch your Steam Deck to **Desktop Mode** and choose the method that makes you most comfortable:
 
 ### Method 1: The Downloadable App Shortcut (Easiest)
-1. Download the `Install_Dock_Wake_Manager.desktop` file directly from this repository to your Steam Deck's Desktop.
-2. Double-click the file on your desktop and choose **Execute** (or *Trust* if prompted by SteamOS).
-3. The utility will handle the rest, launching the graphical control panel automatically!
+### Method 1: The Desktop App Shortcut (Easiest)
+
+1. **Download:** Right-click the `Install_Dock_Wake_Manager.desktop` file here on GitHub, select **Save Link As...**, and drop it straight onto your Steam Deck's **Desktop**.
+2. **Enable Permissions:** Right-click the downloaded file on your desktop, select **Properties**, go to the **Permissions** tab, and check the box that says **"Is executable"**.
+3. **Run:** Double-click the file and click **Execute** (or *Trust* if prompted). The launcher will handle the download and fire up your new control panel instantly!
 
 ### Method 2: The Konsole One-Liner
 If you prefer using the terminal, pop open `Konsole` and execute this single command:
