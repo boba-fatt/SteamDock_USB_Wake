@@ -247,7 +247,7 @@ show_main_menu() {
         status_text="${status_text}<b>📂 IMMUTABLE SYSTEM OVERLAYS</b>\n"
         status_text="${status_text}  • <span font_family='monospace' font_size='small' foreground='gray'>$UDEV_PATH</span> $udev_status\n"
         status_text="${status_text}  • <span font_family='monospace' font_size='small' foreground='gray'>/etc/sudoers.d/dock-wake-shield</span> $sudo_status\n"
-        status_text="${status_text}────────────────────────────────────────────────────────────\n\n"
+        status_text="${status_text}────────────────────────────────────────────────────────────\n"
 
         status_text="${status_text}<b>🔌 CONNECTED HARDWARE SURVEY</b>\n"
         status_text="${status_text}<span font_family='monospace' font_size='small'>ID            DEVICE DESCRIPTION                STATUS</span>\n"
@@ -271,7 +271,7 @@ show_main_menu() {
             --title="Steam Deck Dock Wake Manager" \
             --text="$status_text" \
             --column="Available Action Routines" "${menu_options[@]}" \
-            --height=530 --width=540 \
+            --height=600 --width=540 \
             --ok-label="Execute" --cancel-label="Exit Application")
 
         # If user closes window or hits Cancel, cleanly exit the background thread
