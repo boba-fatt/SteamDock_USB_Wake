@@ -12,8 +12,7 @@ export RUNTIME_SCRIPT="/home/deck/.config/systemd/user-sleep/99_dock_wake_delay.
 export SERVICE_FILE="/home/deck/.config/systemd/user/dock-wake-shield.service"
 export UDEV_PATH="/etc/udev/rules.d/99-dock-hub-wake.rules"
 
-
-# mute the chatter
+# Mute standard library font warning chatter
 zenity() {
     command zenity "$@" 2>/dev/null
 }
@@ -23,7 +22,6 @@ zenity() {
 # ------------------------------------------------------------------------------
 
 get_root_credentials() {
-    # If we are already root, skip the popup completely
     if [ "$EUID" -ne 0 ] && [ -z "$PASS" ]; then
         if command -v zenity &> /dev/null; then
             PASS=$(zenity --password --title="Authentication Required" --text="SteamOS Dock Wake Utility needs administrator privileges to update udev rules.")
@@ -33,7 +31,6 @@ get_root_credentials() {
                 exit 1
             fi
             
-            # Pipe the password into sudo to verify it before continuing
             echo "$PASS" | sudo -S -v &>/dev/null
             if [ $? -ne 0 ]; then
                 zenity --error --text="Incorrect password. Please run the script again."
@@ -103,16 +100,13 @@ EOF
 # 2. "BRAIN FART" DETECTION ENGINE (SELF-HEALING SYSTEM DIAGNOSTIC)
 # ------------------------------------------------------------------------------
 run_diagnostic() {
-    # If config is missing but assets exist, reverse-engineer and reconstruct it
     if [ ! -f "$CONFIG_FILE" ] && { [ -f "$UDEV_PATH" ] || systemctl --user is-enabled dock-wake-shield.service &>/dev/null; }; then
         fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
 
-        # Recover Service Status
         if systemctl --user is-enabled dock-wake-shield.service &>/dev/null; then
             set_config_value "user_sleep_service_installed" "true"
         fi
 
-        # Recover udev Rules Status & Cached Hub Profiles
         if [ -f "$UDEV_PATH" ]; then
             set_config_value "udev_rules_installed" "true"
             local vids=($(grep -oP 'ATTRS{idVendor}=="\K[^" ]+' "$UDEV_PATH"))
@@ -126,77 +120,125 @@ run_diagnostic() {
         fi
     fi
 
-    # BRAIN FART AUTO-HEAL: Re-verify desktop app launcher existence
     if [ -f "$CONFIG_FILE" ] && [ ! -f "/home/deck/Desktop/DockWakeManager.desktop" ]; then
         create_desktop_launcher
     fi
 }
 
 # ------------------------------------------------------------------------------
-# 3. INTERACTIVE GUI PIPELINE (DYNAMIC LOOP)
+# 3. INTERACTIVE GUI PIPELINE (PERSISTENT APPLICATION LOOP)
 # ------------------------------------------------------------------------------
 show_main_menu() {
-    run_diagnostic
+    while true; do
+        run_diagnostic
 
-    # Check if core layout is currently installed
-    local is_installed=false
-    if [ -f "$CONFIG_FILE" ] && [ -f "$RUNTIME_SCRIPT" ] && [ -f "$SERVICE_FILE" ]; then
-        is_installed=true
-    fi
+        local current_delay=$(get_config_value "sleep_buffer_seconds")
+        [ -z "$current_delay" ] && current_delay=10
 
-    local menu_options=()
-    if [ "$is_installed" = true ]; then
-        if [ "$FRESHLY_INSTALLED" = true ]; then
-            menu_options+=("Update / Repair Utilities" "(*) Scan & Register Hubs" "(*) Adjust Sleep Timer" "Completely Uninstall")
-        else
-            menu_options+=("Update / Repair Utilities" "Scan & Register Hubs" "Adjust Sleep Timer" "Completely Uninstall")
+        local is_installed=false
+        if [ -f "$CONFIG_FILE" ] && [ -f "$RUNTIME_SCRIPT" ] && [ -f "$SERVICE_FILE" ]; then
+            is_installed=true
         fi
-    else
-        menu_options+=("Install Core Utility Suite")
-    fi
 
-    CHOICE=$(zenity --list \
-        --title="Steam Deck Dock Wake Manager" \
-        --text="Select an operation to perform:" \
-        --column="Actions" "${menu_options[@]}" \
-        --height=300 --width=400 \
-        --ok-label="Select" --cancel-label="Exit")
+        # Compute Hardware Topology and Device State Readouts
+        local total_hubs=0
+        local registered_hubs=0
+        local hardware_report=""
 
-    case "$CHOICE" in
-        "Install Core Utility Suite")
-            execute_install
-            export FRESHLY_INSTALLED=true
-            show_main_menu
-            ;;
-        "Update / Repair Utilities")
-            execute_install
-            zenity --info --text="Utility suite successfully verified and repaired!" --timeout=2
-            show_main_menu
-            ;;
-        *"Scan & Register Hubs")
-            execute_hub_wizard
-            show_main_menu
-            ;;
-        *"Adjust Sleep Timer")
-            execute_timer_config
-            show_main_menu
-            ;;
-        "Completely Uninstall")
-            execute_uninstall
-            export FRESHLY_INSTALLED=false
-            show_main_menu
-            ;;
-        *)
-            exit 0
-            ;;
-    esac
+        while read -r line; do
+            local vid=$(echo "$line" | awk '{print $6}' | cut -d':' -f1)
+            local pid=$(echo "$line" | awk '{print $6}' | cut -d':' -f2)
+            local hw_id="${vid}:${pid}"
+            local raw_desc=$(echo "$line" | cut -d' ' -f7-)
+            
+            # Cleanly truncate description strings to enforce column integrity
+            local desc="${raw_desc:0:32}"
+            ((total_hubs++))
+
+            if [ "$is_installed" = true ] && [ -f "$CONFIG_FILE" ] && grep -q "$hw_id" "$CONFIG_FILE"; then
+                ((registered_hubs++))
+                # Monospace padding with green confirmation tags
+                local formatted_row=$(printf "%-11s  %-32s <span foreground='green'>- Registered</span>\n" "$hw_id" "$desc")
+                hardware_report="${hardware_report}${formatted_row}"
+            else
+                # Monospace padding with orange pending warning tags
+                local formatted_row=$(printf "%-11s  %-32s <span foreground='orange'>- Unregistered</span>\n" "$hw_id" "$desc")
+                hardware_report="${hardware_report}${formatted_row}"
+            fi
+        done < <(lsusb | grep -i "hub" | grep -v "root hub")
+
+        # Fallback profile string if layout survey yields nothing connected
+        if [ $total_hubs -eq 0 ]; then
+            hardware_report="  No external hardware docks detected via USB system path."
+        fi
+
+        # Generate Main Interface Readout Block (Using Pango Markup font blocks)
+        local status_text=""
+        status_text="${status_text}<b>🛡️ SYSTEM STATUS PROFILE</b>\n"
+        status_text="${status_text}────────────────────────────────────────────────────────────\n"
+        status_text="${status_text}  • Shield Sleep Delay : ${current_delay} Seconds\n"
+        if [ "$is_installed" = true ]; then
+            status_text="${status_text}  • Monitored Hardware : ${registered_hubs}/${total_hubs} USB Hub Targets Registered\n"
+        else
+            status_text="${status_text}  • Monitored Hardware : Core Installation Suite Missing\n"
+        fi
+        status_text="${status_text}────────────────────────────────────────────────────────────\n\n"
+        status_text="${status_text}<b>🔌 CONNECTED HARDWARE SURVEY</b>\n"
+        status_text="${status_text}<span font_family='monospace'>ID           DEVICE DESCRIPTION                STATUS</span>\n"
+        status_text="${status_text}────────────────────────────────────────────────────────────\n"
+        status_text="${status_text}<span font_family='monospace'>${hardware_report}</span>\n"
+        status_text="${status_text}────────────────────────────────────────────────────────────"
+
+        local menu_options=()
+        if [ "$is_installed" = true ]; then
+            if [ "$FRESHLY_INSTALLED" = true ]; then
+                menu_options+=("Update / Repair Utilities" "(*) Scan & Register Hubs" "(*) Adjust Sleep Timer" "Completely Uninstall Suite")
+            else
+                menu_options+=("Update / Repair Utilities" "Scan & Register Hubs" "Adjust Sleep Timer" "Completely Uninstall Suite")
+            fi
+        else
+            menu_options+=("Install Core Utility Suite")
+        fi
+
+        CHOICE=$(zenity --list \
+            --title="Steam Deck Dock Wake Manager" \
+            --text="$status_text" \
+            --column="Available Action Routines" "${menu_options[@]}" \
+            --height=530 --width=540 \
+            --ok-label="Execute" --cancel-label="Exit Application")
+
+        # If user closes window or hits Cancel, cleanly exit the background thread
+        [ $? -ne 0 ] && exit 0
+
+        case "$CHOICE" in
+            "Install Core Utility Suite" | "Update / Repair Utilities")
+                execute_install
+                [ "$CHOICE" = "Install Core Utility Suite" ] && export FRESHLY_INSTALLED=true
+                if [ "$CHOICE" = "Update / Repair Utilities" ]; then
+                    zenity --info --text="Utility suite successfully verified and repaired!" --timeout=2
+                fi
+                ;;
+            *"Scan & Register Hubs")
+                execute_hub_wizard
+                ;;
+            *"Adjust Sleep Timer")
+                execute_timer_config
+                ;;
+            "Completely Uninstall Suite")
+                execute_uninstall
+                export FRESHLY_INSTALLED=false
+                ;;
+            *)
+                exit 0
+                ;;
+        esac
+    done
 }
 
 # ------------------------------------------------------------------------------
 # 4. UNDERLYING EXECUTION ENGINES
 # ------------------------------------------------------------------------------
 execute_install() {
-    # Dynamically point REPO_BASE to the active branch if testing
     if [[ "$XYZ" =~ "sleep_wake_delay" ]] || [[ "$0" =~ "sleep_wake_delay" ]]; then
         export REPO_BASE="https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/sleep_wake_delay"
     fi
@@ -205,7 +247,6 @@ execute_install() {
     fetch_repo_asset "99_dock_wake_delay.sh" "$RUNTIME_SCRIPT"
     fetch_repo_asset "dock-wake-shield.service" "$SERVICE_FILE"
 
-    # Self-Healing systemd sequence: Reload, disable old broken state, then force enable
     systemctl --user daemon-reload
     systemctl --user disable dock-wake-shield.service &>/dev/null
     systemctl --user enable dock-wake-shield.service
@@ -222,7 +263,6 @@ execute_timer_config() {
     local current_delay=$(get_config_value "sleep_buffer_seconds")
     [ -z "$current_delay" ] && current_delay=10
 
-    # Step 1: Ask the user to choose a configuration mode cleanly
     local mode_choice=$(zenity --list --radiolist \
         --title="Configure Sleep Buffer" \
         --text="Select your desired configuration method:" \
@@ -231,12 +271,10 @@ execute_timer_config() {
         FALSE "Advanced Manual Input" \
         --height=200 --width=350 --ok-label="Next")
 
-    # If the user hits cancel or exits the window
     [ -z "$mode_choice" ] && return
 
     local final_value=$current_delay
 
-    # Step 2: Dynamically open the correct standalone Zenity window
     if [[ "$mode_choice" == "Simple Slider"* ]]; then
         final_value=$(zenity --scale --title="Simple Slider Setup" \
             --text="Adjust sleep shield duration buffer (2 to 30 seconds):" \
@@ -258,7 +296,6 @@ execute_timer_config() {
         fi
     fi
 
-    # Save the updated parameter if the user didn't cancel out of the sub-windows
     if [ -n "$final_value" ]; then
         set_config_value "sleep_buffer_seconds" "$final_value"
     fi
@@ -266,23 +303,39 @@ execute_timer_config() {
 
 execute_hub_wizard() {
     local usb_list=()
+    local raw_hubs=()
+    
+    # Inject the global select action entry at index row 0
+    usb_list+=( "FALSE" "ALL_HUBS" "[SELECT ALL DISCOVERED DOCK TARGETS]" )
+
     while read -r line; do
         local vid=$(echo "$line" | awk '{print $6}' | cut -d':' -f1)
         local pid=$(echo "$line" | awk '{print $6}' | cut -d':' -f2)
+        local hw_id="${vid}:${pid}"
         local desc=$(echo "$line" | cut -d' ' -f7-)
-        usb_list+=( "FALSE" "$vid:$pid" "$desc" )
+        
+        raw_hubs+=("$hw_id")
+
+        # Persistence Recovery Layer: Auto-check items matching config database
+        local default_state="FALSE"
+        if [ -f "$CONFIG_FILE" ] && grep -q "$hw_id" "$CONFIG_FILE"; then
+            default_state="TRUE"
+        fi
+
+        usb_list+=( "$default_state" "$hw_id" "$desc" )
     done < <(lsusb | grep -i "hub" | grep -v "root hub")
 
-    if [ ${#usb_list[@]} -eq 0 ]; then
+    if [ ${#usb_list[@]} -le 3 ]; then
         zenity --error --text="No compatible external USB hubs were discovered attached to the Deck."
         return
     fi
 
     local chosen_hubs=$(zenity --list --checklist --title="Hardware Discovery Wizard" \
-        --text="Check the target desktop dock components to control:" \
-        --column="Manage" --column="Hardware ID" --column="Device Description" \
-        "${usb_list[@]}" --height=350 --width=500)
+        --text="Manage system targets (Pre-registered items are already checked):" \
+        --column="Monitor" --column="Hardware ID" --column="Device Description" \
+        "${usb_list[@]}" --height=400 --width=540)
 
+    # State Reconciliation Phase (Triggers on explicit selections or unchecked drop events)
     if [ -n "$chosen_hubs" ]; then
         unlock_system
         echo "$PASS" | sudo -S rm -f "$UDEV_PATH"
@@ -291,13 +344,24 @@ execute_hub_wizard() {
         local IFS='|'
         local count=0
         local udev_buffer=""
-        
-        for entry in $chosen_hubs; do
-            local vid=$(echo "$entry" | cut -d':' -f1)
-            local pid=$(echo "$entry" | cut -d':' -f2)
+        local final_targets=()
+
+        # Handle the comprehensive Select All capture hook
+        if [[ "$chosen_hubs" == *"ALL_HUBS"* ]]; then
+            final_targets=("${raw_hubs[@]}")
+        else
+            for entry in $chosen_hubs; do
+                [ "$entry" != "ALL_HUBS" ] && final_targets+=("$entry")
+            done
+        fi
+
+        # Sync loop across verified targets (unselected elements are dropped out entirely)
+        for target in "${final_targets[@]}"; do
+            local vid=$(echo "$target" | cut -d':' -f1)
+            local pid=$(echo "$target" | cut -d':' -f2)
 
             udev_buffer="${udev_buffer}SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"$vid\", ATTRS{idProduct}==\"$pid\", ATTR{power/wakeup}=\"enabled\""$'\n'
-            echo "$entry" >> "$CONFIG_FILE"
+            echo "$target" >> "$CONFIG_FILE"
             ((count++))
         done
 
@@ -308,7 +372,7 @@ execute_hub_wizard() {
 
         echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
         lock_system
-        zenity --info --text="Successfully registered $count dock tracking vectors!" --timeout=2
+        zenity --info --text="Successfully synchronized tracking matrices ($count active targets)!" --timeout=2
     fi
 }
 
