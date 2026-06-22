@@ -20,7 +20,7 @@ Forget messy terminal commands or confusing text files. This manager features a 
 > [!WARNING]
 > *I am not responsible for you or the decisions you make, so if your Deck, or ROG, or Legion Go, or Microwave, or Tesla implode or stop working properly...*
 >
-> ![](./assets/itysl_dk-bud.gif)
+> ![dunno bud](./assets/itysl_dk-bud.gif)
 
 ---
 
@@ -42,7 +42,8 @@ curl -sSL [https://bit.ly/3QZbWWh](https://bit.ly/3QZbWWh) -o /tmp/manage_dock.s
 🔑 "Not Everyone Knows How to Do Everything!" (Safe Password Setup)
 A lot of people run their Steam Decks completely stock and have never set up an administrator (sudo) password. If that's you, don't panic. "Not everyone knows how to do everything! Driving isn't the only thing!"
 
-![](./assets/itysl_nek-how.gif)
+> [!TIP]
+> ![not everyone konws everything](./assets/itysl_nek-how.gif )
 
 This manager handles the system security checks completely safely:
 
