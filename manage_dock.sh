@@ -277,7 +277,7 @@ show_main_menu() {
         fi
 
         # Step C: Any keys left over in our map are verified Offline Global Targets
-        hardware_report="${hardware_report}\n<span font_family='monospace' font_size='small'>🌐 ROAMING GLOBAL REGISTRY</span>\n"
+        hardware_report="${hardware_report}\n<span font_family='monospace' font_size='small'>🌐 ROAMING GLOBAL REGISTRY</span>"
         local offline_count=0
         for offline_id in "${!registered_hubs_map[@]}"; do
             local offline_desc="${registered_hubs_map[$offline_id]}"
@@ -326,7 +326,6 @@ show_main_menu() {
             echo "  • <span font_family='monospace' font_size='small' foreground='gray'>${formatted_udev_path}</span> ${udev_status}"
             echo "  • <span font_family='monospace' font_size='small' foreground='gray'>${formatted_sudo_path}</span> ${sudo_status}"
             echo "────────────────────────────────────────────────────────────"
-            echo ""
             echo "<b>🔌 ECOSYSTEM HARDWARE MONITOR</b>"
             echo "<span font_family='monospace' font_size='small'>    ID            DEVICE DESCRIPTION                 STATUS</span>"
             echo "────────────────────────────────────────────────────────────"
@@ -346,11 +345,11 @@ show_main_menu() {
             menu_options+=("Install Core Utility Suite")
         fi
 
-        CHOICE=$(zenity --list \
+            CHOICE=$(zenity --list \
             --title="Steam Deck Dock Wake Manager" \
             --text="$status_text" \
             --column="Available Action Routines" "${menu_options[@]}" \
-            --height=600 --width=620 \
+            --height=740 --width=650 \
             --ok-label="Execute" --cancel-label="Exit Application")
 
         # If user closes window or hits Cancel, cleanly exit the background thread
