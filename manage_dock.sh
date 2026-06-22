@@ -21,19 +21,64 @@ zenity() {
 # 1. STANDARDIZED REUSABLE HELPER FUNCTIONS
 # ------------------------------------------------------------------------------
 
+verify_system_password_exists() {
+    # Check if the deck user can escalate or if the account password status is blank/locked
+    if ! echo "testing_privileges" | sudo -S -v &>/dev/null; then
+        if passwd -S deck 2>/dev/null | grep -E -q "L|NP"; then
+            
+            # Explicit, beginner-friendly informational warning block
+            local message_text="<b>⚠️ Administrator Password Required</b>\n\n"
+            message_text="${message_text}It looks like you haven't set up a system password for your Steam Deck yet!\n\n"
+            message_text="${message_text}This utility needs one to securely update system hardware rules (udev) and background services (systemd). SteamOS restricts these actions until a password is built.\n\n"
+            message_text="${message_text}💡 <b>RECOMMENDATION:</b> The most common and standard password for Steam Deck users is simply <b>deck</b>, but you can use whatever you would like—just make sure you remember it!\n\n"
+            message_text="${message_text}🚀 <b>WHAT HAPPENS NEXT:</b> If you choose to proceed, you will be redirected to a standard Konsole window that runs the native Linux <b>'passwd'</b> command.\n\n"
+            message_text="${message_text}🔒 <b>SECURITY NOTE:</b> This configuration utility never saves, transmits, or records your password anywhere. It stays completely local and private to your device."
+
+            local setup_choice=$(zenity --question \
+                --title="Sudo Password Required" \
+                --text="$message_text" \
+                --ok-label="Set up Password Now" --cancel-label="Exit Utility" \
+                --height=420 --width=520)
+            
+            if [ $? -eq 0 ]; then
+                # Friendly instructional step right before firing off the terminal context window
+                zenity --info --text="A terminal window will now pop up to let you create your password.\n\nPlease type your new password twice, pressing Enter after each time.\n\n⚠️ <b>NOTE:</b> The terminal will NOT show characters or asterisks while you are typing for privacy security! Just type it out blindly and hit Enter." --width=450
+                
+                # Spawn an active Konsole frame running the secure native Linux passwd pipeline
+                konsole --noclose -e "passwd"
+                
+                # Double-check state tracking loops to see if they completed it or just killed the tab
+                if passwd -S deck 2>/dev/null | grep -E -q "L|NP"; then
+                    zenity --error --text="Password setup was not detected. The utility will now close."
+                    exit 1
+                fi
+            else
+                exit 0
+            fi
+        fi
+    fi
+}
+
 get_root_credentials() {
+    # Run the pre-flight safety check first to protect inexperienced users
+    verify_system_password_exists
+
+    # If we are already root, skip the prompt sequence entirely
     if [ "$EUID" -ne 0 ] && [ -z "$PASS" ]; then
         if command -v zenity &> /dev/null; then
             PASS=$(zenity --password --title="Authentication Required" --text="SteamOS Dock Wake Utility needs administrator privileges to update udev rules.")
             
             if [ -z "$PASS" ]; then
-                zenity --error --text="Installation cancelled. Administrator privileges are required."
+                zenity --error --text="Operation cancelled. Administrator privileges are required."
                 exit 1
             fi
             
+            # Verify the typed credentials against the live sudo engine
             echo "$PASS" | sudo -S -v &>/dev/null
             if [ $? -ne 0 ]; then
                 zenity --error --text="Incorrect password. Please run the script again."
+                # Clear out the unverified variable cache to avoid stuck loop hooks
+                unset PASS
                 exit 1
             fi
         else
