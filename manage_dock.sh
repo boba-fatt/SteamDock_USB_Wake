@@ -125,14 +125,21 @@ fetch_repo_asset() {
 }
 
 create_desktop_launcher() {
+    local icon_dir="/home/deck/.config/systemd/user-sleep"
+    local icon_path="${icon_dir}/dock_wake_small.png"
     local desktop_launcher="/home/deck/Desktop/DockWakeManager.desktop"
+
+    # 1. Pull the icon asset straight from your repository assets folder
+    mkdir -p "$icon_dir"
+    curl -sSL "${REPO_BASE}/assets/dock_wake_small.png" -o "$icon_path"
+
+    # 2. Build the desktop entry pointing explicitly to your repo icon asset
     cat << 'EOF' > "$desktop_launcher"
 [Desktop Entry]
 Name=Dock Wake Manager
 Comment=Manage Steam Deck USB Hub Wake and Sleep Shields
-# FIX: Spawns Konsole, downloads the raw master script from the repo, and runs it live in memory
-Exec=konsole --hold -e bash -c "curl -sSL https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/main/manage_dock.sh | bash"
-Icon=preferences-system-power
+Exec=konsole --hold -e bash -c "curl -sSL https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/\${TARGET_BRANCH:-main}/manage_dock.sh | bash"
+Icon=${icon_path}
 Terminal=false
 Type=Application
 Categories=Utility;
