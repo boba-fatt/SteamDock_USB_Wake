@@ -64,17 +64,7 @@ verify_system_password_exists() {
 get_root_credentials() {
     verify_system_password_exists
 
-    if sudo -n -v &>/dev/null; then
-        return 0
-    fi
-
-    if [ -n "$PASS" ]; then
-        if echo "$PASS" | sudo -S -v &>/dev/null; then
-            return 0
-        fi
-    fi
-
-    if [ "$EUID" -ne 0 ]; then
+    if [ "$EUID" -ne 0 ] && [ -z "$PASS" ]; then
         if command -v zenity &> /dev/null; then
             PASS=$(zenity --password --title="Authentication Required" --text="SteamOS Dock Wake Utility needs administrator privileges.")
             
@@ -147,6 +137,35 @@ Type=Application
 Categories=Utility;
 EOF
     chmod +x "$desktop_launcher"
+}
+
+execute_with_log() {
+    local window_title="$1"
+    local routine_function="$2"
+
+    # 1. Secure root credentials on the surface loop first
+    get_root_credentials
+
+    # 2. Create a temporary named pipe for real-time streaming
+    local pipe="/tmp/dock_wake_log.fifo"
+    rm -f "$pipe"
+    mkfifo "$pipe"
+
+    # 3. Launch Zenity in the background, listening to the pipe
+    zenity --text-info \
+        --title="$window_title" \
+        --width=520 --height=300 \
+        --font_family="monospace" \
+        --auto-scroll < "$pipe" &
+    local zenity_pid=$!
+
+    # 4. Redirect the routine function's output straight into the pipe
+    # This runs in the main thread, so sudo/password boxes spawn flawlessly!
+    $routine_function > "$pipe" 2>&1
+
+    # 5. Clean up the background thread and named pipe
+    rm -f "$pipe"
+    wait $zenity_pid 2>/dev/null
 }
 
 reload_udev_subsystem() {
@@ -323,6 +342,7 @@ show_main_menu() {
             menu_options+=("Install Core Utility Suite")
         fi
 
+        # FIX C: Split window initialization patterns so the main window stays anchored in background spaces
         CHOICE=$(zenity --list \
             --title="Steam Deck Dock Wake Manager" \
             --text="$status_text" \
@@ -334,7 +354,7 @@ show_main_menu() {
 
         case "$CHOICE" in
             "Install Core Utility Suite" | "Update / Repair Utilities")
-                run_install_routine
+                execute_with_log "Core Suite Setup Engine" run_install_routine
                 [ "$CHOICE" = "Install Core Utility Suite" ] && export FRESHLY_INSTALLED=true
                 ;;
             *"Scan & Register Hubs")
@@ -344,7 +364,7 @@ show_main_menu() {
                 execute_timer_config
                 ;;
             "Completely Uninstall Suite")
-                run_uninstall_routine
+                execute_with_log "Core Suite Uninstallation Engine" run_uninstall_routine
                 export FRESHLY_INSTALLED=false
                 ;;
             *)
@@ -362,9 +382,6 @@ run_install_routine() {
         export REPO_BASE="https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/sleep_wake_delay"
     fi
 
-    echo "=================================================================="
-    echo " 🛡️  CORE SUITE SETUP ENGINE "
-    echo "=================================================================="
     echo "📥 Fetching structural application databases from repository..."
     fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
     fetch_repo_asset "99_dock_wake_delay.sh" "$RUNTIME_SCRIPT"
@@ -406,9 +423,6 @@ EOF
 }
 
 run_uninstall_routine() {
-    echo "=================================================================="
-    echo " 🛡️  CORE SUITE UNINSTALLATION ENGINE "
-    echo "=================================================================="
     echo "🔒 Requesting system administration authorization tokens..."
     unlock_system
 
@@ -419,6 +433,7 @@ run_uninstall_routine() {
     reload_udev_subsystem
 
     echo "🗑️ Dropping sudoers privilege exception layers..."
+    # FIX: Explicit path target ensures the file is vaporized regardless of subshell environment scope
     echo "$PASS" | sudo -S rm -f "/etc/sudoers.d/dock-wake-shield"
 
     lock_system
@@ -505,6 +520,7 @@ execute_hub_wizard() {
         return
     fi
 
+    # Fix: Get authentication context in parent thread before spawning the wizard modal box
     get_root_credentials
 
     local chosen_hubs=$(zenity --list --checklist --title="Hardware Discovery Wizard" \
