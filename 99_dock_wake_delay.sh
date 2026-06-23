@@ -106,3 +106,4 @@ case "$1" in
         # If we passed the guard time safely, it's a true couch wake. Turn the ears back on!
         toggle_wake "enabled"
         ;;
+    esac
