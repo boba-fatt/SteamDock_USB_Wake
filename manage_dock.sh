@@ -493,7 +493,7 @@ EOF
                 local pid=$(echo "$target_id" | cut -d':' -f2)
 
                 if [ -n "$vid" ] && [ -n "$pid" ]; then
-                    udev_buffer="${udev_buffer}SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"$vid\", ATTRS{idProduct}==\"$pid\", ATTR{power/wakeup}=\"enabled\""$'\n'
+                    udev_buffer="${udev_buffer}SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"$vid\", ATTRS{idProduct}==\"$pid\", ATTR{power/wakeup}=\"enabled\", ATTR{power/control}=\"on\""$'\n'
                     ((count++))
                 fi
             done
@@ -694,7 +694,7 @@ execute_hub_wizard() {
             local pid=$(echo "$target" | cut -d':' -f2)
             local metadata="${label_map[$target]}"
 
-            udev_buffer="${udev_buffer}SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"$vid\", ATTRS{idProduct}==\"$pid\", ATTR{power/wakeup}=\"enabled\""$'\n'
+            udev_buffer="${udev_buffer}SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"$vid\", ATTRS{idProduct}==\"$pid\", ATTR{power/wakeup}=\"enabled\", ATTR{power/control}=\"on\""$'\n'
             echo "${target}|${metadata}" >> "$CONFIG_FILE"
             echo "Base Core Active Target ->: ${target} (${metadata})"
             ((count++))
