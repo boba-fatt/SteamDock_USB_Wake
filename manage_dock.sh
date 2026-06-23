@@ -125,16 +125,16 @@ fetch_repo_asset() {
 }
 
 create_desktop_launcher() {
-    local icon_path="/home/deck/.config/systemd/user-sleep/dock_wake_small.png"
     local desktop_launcher="/home/deck/Desktop/DockWakeManager.desktop"
 
-    # Build the desktop entry pointing straight to the verified, existing image path
+    # Build the desktop entry with the hardcoded absolute path to the icon asset
     cat << 'EOF' > "$desktop_launcher"
 [Desktop Entry]
 Name=Dock Wake Manager
 Comment=Manage Steam Deck USB Hub Wake and Sleep Shields
-Exec=konsole --hold -e bash -c "curl -sSL https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/main/manage_dock.sh | bash"
-Icon=/home/deck/.config/systemd/user-sleep/dock_wake_small.pngTerminal=false
+Exec=konsole --hold -e bash -c "curl -sSL https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/${TARGET_BRANCH:-main}/manage_dock.sh | bash"
+Icon=/home/deck/.config/systemd/user-sleep/dock_wake_small.png
+Terminal=false
 Type=Application
 Categories=Utility;
 EOF
