@@ -130,7 +130,8 @@ create_desktop_launcher() {
 [Desktop Entry]
 Name=Dock Wake Manager
 Comment=Manage Steam Deck USB Hub Wake and Sleep Shields
-Exec=$HOME/.config/systemd/user-sleep/manage_dock.sh
+# FIX: Using hardcoded home target folder paths drops /bin/sh binary shell initialization crash profiles
+Exec=/home/deck/.config/systemd/user-sleep/manage_dock.sh
 Icon=preferences-system-power
 Terminal=false
 Type=Application
@@ -143,29 +144,13 @@ execute_with_log() {
     local window_title="$1"
     local routine_function="$2"
 
-    # 1. Secure root credentials on the surface loop first
-    get_root_credentials
-
-    # 2. Create a temporary named pipe for real-time streaming
-    local pipe="/tmp/dock_wake_log.fifo"
-    rm -f "$pipe"
-    mkfifo "$pipe"
-
-    # 3. Launch Zenity in the background, listening to the pipe
-    zenity --text-info \
-        --title="$window_title" \
-        --width=520 --height=300 \
-        --font_family="monospace" \
-        --auto-scroll < "$pipe" &
-    local zenity_pid=$!
-
-    # 4. Redirect the routine function's output straight into the pipe
-    # This runs in the main thread, so sudo/password boxes spawn flawlessly!
-    $routine_function > "$pipe" 2>&1
-
-    # 5. Clean up the background thread and named pipe
-    rm -f "$pipe"
-    wait $zenity_pid 2>/dev/null
+    # Ditching the pipe/FIFO engines entirely.
+    # This fires the progress echos out natively into the original launch terminal session window.
+    echo ""
+    echo "=================================================================="
+    echo " 🛡️  ${window_title^^} "
+    echo "=================================================================="
+    $routine_function
 }
 
 reload_udev_subsystem() {
@@ -342,7 +327,6 @@ show_main_menu() {
             menu_options+=("Install Core Utility Suite")
         fi
 
-        # FIX C: Split window initialization patterns so the main window stays anchored in background spaces
         CHOICE=$(zenity --list \
             --title="Steam Deck Dock Wake Manager" \
             --text="$status_text" \
@@ -519,7 +503,6 @@ execute_hub_wizard() {
         return
     fi
 
-    # Fix: Get authentication context in parent thread before spawning the wizard modal box
     get_root_credentials
 
     local chosen_hubs=$(zenity --list --checklist --title="Hardware Discovery Wizard" \
