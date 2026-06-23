@@ -23,6 +23,7 @@ zenity() {
 # ------------------------------------------------------------------------------
 
 verify_system_password_exists() {
+    # Check if the deck user can escalate silently or if password status is blank/locked
     if ! echo "testing_privileges" | sudo -S -v &>/dev/null; then
         if passwd -S deck 2>/dev/null | grep -E -q "L|NP"; then
             
@@ -64,7 +65,20 @@ verify_system_password_exists() {
 get_root_credentials() {
     verify_system_password_exists
 
-    if [ "$EUID" -ne 0 ] && [ -z "$PASS" ]; then
+    # First check if sudo has an active system-wide timestamp lease valid right now
+    if sudo -n -v &>/dev/null; then
+        return 0
+    fi
+
+    # Next check if we already have a functional password saved in our running RAM cache
+    if [ -n "$PASS" ]; then
+        if echo "$PASS" | sudo -S -v &>/dev/null; then
+            return 0
+        fi
+    fi
+
+    # Fallback to the persistent Zenity password block if neither tracking layer is authenticated
+    if [ "$EUID" -ne 0 ]; then
         if command -v zenity &> /dev/null; then
             PASS=$(zenity --password --title="Authentication Required" --text="SteamOS Dock Wake Utility needs administrator privileges.")
             
@@ -143,29 +157,58 @@ execute_with_log() {
     local window_title="$1"
     local routine_function="$2"
 
-    # 1. Secure root credentials on the surface loop first
+    # 1. Pull the password context early inside the static surface environment box
     get_root_credentials
 
-    # 2. Create a temporary named pipe for real-time streaming
-    local pipe="/tmp/dock_wake_log.fifo"
-    rm -f "$pipe"
-    mkfifo "$pipe"
+    # 2. Build a standalone, self-cleaning temporary worker script for Konsole execution
+    local temp_exec="/tmp/dock_wake_worker.sh"
+    cat << 'EOF' > "$temp_exec"
+#!/usr/bin/env bash
+echo "=================================================================="
+echo " 🛡️  ${window_title^^} "
+echo "=================================================================="
+echo ""
 
-    # 3. Launch Zenity in the background, listening to the pipe
-    zenity --text-info \
-        --title="$window_title" \
-        --width=520 --height=300 \
-        --font_family="monospace" \
-        --auto-scroll < "$pipe" &
-    local zenity_pid=$!
+# Pass down verified variables into worker execution environment
+export PASS="$PASS"
+export CONFIG_FILE="$CONFIG_FILE"
+export RUNTIME_SCRIPT="$RUNTIME_SCRIPT"
+export SERVICE_FILE="$SERVICE_FILE"
+export UDEV_PATH="$UDEV_PATH"
+export SUDO_ERS="$SUDO_ERS"
+export TARGET_BRANCH="$TARGET_BRANCH"
+export REPO_BASE="$REPO_BASE"
 
-    # 4. Redirect the routine function's output straight into the pipe
-    # This runs in the main thread, so sudo/password boxes spawn flawlessly!
-    $routine_function > "$pipe" 2>&1
+# Inject necessary helper functions so the subshell environment stays fully mapped
+$(typeset -f get_root_credentials)
+$(typeset -f verify_system_password_exists)
+$(typeset -f unlock_system)
+$(typeset -f lock_system)
+$(typeset -f reload_udev_subsystem)
+$(typeset -f fetch_repo_asset)
+$(typeset -f set_config_value)
+$(typeset -f create_desktop_launcher)
 
-    # 5. Clean up the background thread and named pipe
-    rm -f "$pipe"
-    wait $zenity_pid 2>/dev/null
+# Inject the targeted functional payload
+$(typeset -f "$routine_function")
+
+# Run the routine function directly in the terminal view context
+$routine_function
+
+echo ""
+echo "──────────────────────────────────────────────────────────────────"
+echo " Return Key Prompt: Process safely complete."
+echo " Press ANY KEY to return back to the Manager Panel..."
+echo "──────────────────────────────────────────────────────────────────"
+read -n 1 -s
+EOF
+    chmod +x "$temp_exec"
+
+    # 3. Spawn a clean, modular command process tab over top of the parent screen
+    konsole --title="$window_title" -e "$temp_exec"
+    
+    # 4. Clean up worker footprints instantly
+    rm -f "$temp_exec"
 }
 
 reload_udev_subsystem() {
@@ -342,7 +385,6 @@ show_main_menu() {
             menu_options+=("Install Core Utility Suite")
         fi
 
-        # FIX C: Split window initialization patterns so the main window stays anchored in background spaces
         CHOICE=$(zenity --list \
             --title="Steam Deck Dock Wake Manager" \
             --text="$status_text" \
@@ -419,7 +461,7 @@ EOF
         echo "🧹 Discovered active setup shortcut on Desktop. Cleaning up installer artifacts..."
         rm -f "$installer_desktop"
     fi    
-    echo -e "\n✅ Installation routine successfully completed!"
+    echo "✅ Installation routine successfully completed!"
 }
 
 run_uninstall_routine() {
@@ -433,7 +475,6 @@ run_uninstall_routine() {
     reload_udev_subsystem
 
     echo "🗑️ Dropping sudoers privilege exception layers..."
-    # FIX: Explicit path target ensures the file is vaporized regardless of subshell environment scope
     echo "$PASS" | sudo -S rm -f "/etc/sudoers.d/dock-wake-shield"
 
     lock_system
@@ -447,7 +488,7 @@ run_uninstall_routine() {
     rm -rf "/home/deck/.config/systemd/user-sleep/"
     rm -f "/home/deck/Desktop/DockWakeManager.desktop"
     
-    echo -e "\n✅ System environment cleanly restored to factory state!"
+    echo "✅ System environment cleanly restored to factory state!"
 }
 
 execute_timer_config() {
@@ -520,7 +561,7 @@ execute_hub_wizard() {
         return
     fi
 
-    # Fix: Get authentication context in parent thread before spawning the wizard modal box
+    # Secure internal memory authorization check directly inside surface execution ring
     get_root_credentials
 
     local chosen_hubs=$(zenity --list --checklist --title="Hardware Discovery Wizard" \
