@@ -231,8 +231,9 @@ show_main_menu() {
         local current_delay=$(get_config_value "sleep_buffer_seconds")
         [ -z "$current_delay" ] && current_delay=10
 
+        # Evaluate installation purely based on file presence, NOT health
         local is_installed=false
-        if [ "$initial_health" = "PASS" ] && [ -f "$CONFIG_FILE" ] && [ -f "$RUNTIME_SCRIPT" ] && [ -f "$SERVICE_FILE" ]; then
+        if [ -f "$CONFIG_FILE" ] && [ -f "$RUNTIME_SCRIPT" ] && [ -f "$SERVICE_FILE" ]; then
             is_installed=true
         fi
 
