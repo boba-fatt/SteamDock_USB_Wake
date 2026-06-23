@@ -146,17 +146,26 @@ execute_with_log() {
     # 1. Secure root credentials on the surface loop first
     get_root_credentials
 
-    # 2. Run the routine function cleanly in the primary shell context
-    # This captures all standard output into a temporary variable log 
-    local log_output
-    log_output=$($routine_function 2>&1)
+    # 2. Create a temporary named pipe for real-time streaming
+    local pipe="/tmp/dock_wake_log.fifo"
+    rm -f "$pipe"
+    mkfifo "$pipe"
 
-    # 3. Present the compiled log inside your custom monospace display box
-    echo "$log_output" | zenity --text-info \
+    # 3. Launch Zenity in the background, listening to the pipe
+    zenity --text-info \
         --title="$window_title" \
         --width=520 --height=300 \
         --font_family="monospace" \
-        --auto-scroll
+        --auto-scroll < "$pipe" &
+    local zenity_pid=$!
+
+    # 4. Redirect the routine function's output straight into the pipe
+    # This runs in the main thread, so sudo/password boxes spawn flawlessly!
+    $routine_function > "$pipe" 2>&1
+
+    # 5. Clean up the background thread and named pipe
+    rm -f "$pipe"
+    wait $zenity_pid 2>/dev/null
 }
 
 reload_udev_subsystem() {
