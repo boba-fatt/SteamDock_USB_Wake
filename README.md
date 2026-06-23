@@ -43,7 +43,7 @@ graph TD
     H --> D
 ```
   
-- ***Download:*** Click to download the [`Install_Dock_Wake_Manager.desktop`](https://github.com/boba-fatt/SteamDock_USB_Wake/releases/download/v1.0.1/Install_Dock_Wake_Manager.desktop) file from the latest release and save it straight onto your Steam Deck's **Desktop**.
+- ***Download:*** <a href="https://github.com/boba-fatt/SteamDock_USB_Wake/releases/download/v1.0.1/Install_Dock_Wake_Manager.desktop" download>Click to download the `Install_Dock_Wake_Manager.desktop` file</a> from the latest release and save it straight onto your Steam Deck's **Desktop**.
 - ***Run:*** Double-click the file and click **Execute** (or *Trust* if prompted). The launcher will handle the initial repository asset pull and fire up your control panel instantly!
 - ***Enable Permissions:*** Right-click the downloaded icon on your desktop, select **Properties**, go to the **Permissions** tab, and check the box that says **"Is executable"**.
 - ***Run Again:*** Double-click the file Again and click **Execute** (or *Trust* if prompted).
