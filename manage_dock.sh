@@ -23,7 +23,6 @@ zenity() {
 # ------------------------------------------------------------------------------
 
 verify_system_password_exists() {
-    # Check if the deck user can escalate silently or if password status is blank/locked
     if ! echo "testing_privileges" | sudo -S -v &>/dev/null; then
         if passwd -S deck 2>/dev/null | grep -E -q "L|NP"; then
             
@@ -65,19 +64,18 @@ verify_system_password_exists() {
 get_root_credentials() {
     verify_system_password_exists
 
-    # First check if sudo has an active system-wide timestamp lease valid right now
+    # Check if a non-interactive sudo challenge passes right now
     if sudo -n -v &>/dev/null; then
         return 0
     fi
 
-    # Next check if we already have a functional password saved in our running RAM cache
+    # Check if a token string matches live authentication boundaries inside active memory
     if [ -n "$PASS" ]; then
         if echo "$PASS" | sudo -S -v &>/dev/null; then
             return 0
         fi
     fi
 
-    # Fallback to the persistent Zenity password block if neither tracking layer is authenticated
     if [ "$EUID" -ne 0 ]; then
         if command -v zenity &> /dev/null; then
             PASS=$(zenity --password --title="Authentication Required" --text="SteamOS Dock Wake Utility needs administrator privileges.")
@@ -157,73 +155,51 @@ execute_with_log() {
     local window_title="$1"
     local routine_function="$2"
 
-    # 1. Pull the password context early inside the static surface environment box
+    # 1. Pull/Verify your Zenity password inside the anchored surface context loop
     get_root_credentials
 
-    # 2. Build a standalone, self-cleaning temporary worker script for Konsole execution
-    local temp_exec="/tmp/dock_wake_worker.sh"
-    
-    # Capture all function structures into memory variables first
-    local core_helpers
-    core_helpers=$(cat << HELPERS
-$(typeset -f get_root_credentials)
-$(typeset -f verify_system_password_exists)
-$(typeset -f unlock_system)
-$(typeset -f lock_system)
-$(typeset -f reload_udev_subsystem)
-$(typeset -f fetch_repo_asset)
-$(typeset -f set_config_value)
-$(typeset -f create_desktop_launcher)
-HELPERS
-)
-
-    local target_payload
-    target_payload=$(typeset -f "$routine_function")
-
-    # 3. Assemble the worker template using a clean double-quoted string assignment
-    # GitHub's editor will color-code this perfectly because it sees explicit open/close quotes.
-    local worker_template=""
-    worker_template="#!/usr/bin/env bash
-echo \"==================================================================\"
-echo \" 🛡️  ${window_title^^} \"
-echo \"==================================================================\"
-echo \"\"
-
-export PASS=\"$PASS\"
-export CONFIG_FILE=\"$CONFIG_FILE\"
-export RUNTIME_SCRIPT=\"$RUNTIME_SCRIPT\"
-export SERVICE_FILE=\"$SERVICE_FILE\"
-export UDEV_PATH=\"$UDEV_PATH\"
-export SUDO_ERS=\"$SUDO_ERS\"
-export TARGET_BRANCH=\"$TARGET_BRANCH\"
-export REPO_BASE=\"$REPO_BASE\"
-
-# Inject function frameworks
-$core_helpers
-
-$target_payload
-
-# Run payload
-$routine_function
-
-echo \"\"
-echo \"──────────────────────────────────────────────────────────────────\"
-echo \" Return Key Prompt: Process safely complete.\"
-echo \" Press ANY KEY to return back to the Manager Panel...\"
-echo \"──────────────────────────────────────────────────────────────────\"
-read -n 1 -s
-"
-
-    # 4. Write the verified template cleanly to disk
-    echo "$worker_template" > "$temp_exec"
-    chmod +x "$temp_exec"
-
-    # 5. Spawn a clean, modular command process tab over top of the parent screen
-    konsole --title="$window_title" -e "$temp_exec"
-    
-    # 6. Clean up worker footprints instantly
-    rm -f "$temp_exec"
+    # 2. Fire Konsole, calling the active file directly with environmental variables passed
+    # This prevents flashing or closing issues, keeping your primary logic blocks completely pristine
+    konsole --title="$window_title" -e bash -c "
+        echo '==================================================================';
+        echo ' 🛡️  ${window_title^^} ';
+        echo '==================================================================';
+        echo '';
+        export PASS='$PASS';
+        export CONFIG_FILE='$CONFIG_FILE';
+        export RUNTIME_SCRIPT='$RUNTIME_SCRIPT';
+        export SERVICE_FILE='$SERVICE_FILE';
+        export UDEV_PATH='$UDEV_PATH';
+        export SUDO_ERS='$SUDO_ERS';
+        export TARGET_BRANCH='$TARGET_BRANCH';
+        export REPO_BASE='$REPO_BASE';
+        export FRESHLY_INSTALLED='$FRESHLY_INSTALLED';
+        source '$0';
+        $routine_function;
+        echo '';
+        echo '──────────────────────────────────────────────────────────────────';
+        echo ' Return Key Prompt: Process safely complete.';
+        echo ' Press ANY KEY to return back to the Manager Panel...';
+        echo '──────────────────────────────────────────────────────────────────';
+        read -n 1 -s;
+    "
 }
+
+reload_udev_subsystem() {
+    echo "🔄 Refreshing active Linux kernel hardware tracking sub-routines..."
+    echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
+}
+
+query_live_hardware() {
+    while read -r line; do
+        local vid=$(echo "$line" | awk '{print $6}' | cut -d':' -f1)
+        local pid=$(echo "$line" | awk '{print $6}' | cut -d':' -f2)
+        local raw_desc=$(echo "$line" | cut -d' ' -f7-)
+        local desc="${raw_desc:0:32}"
+        echo "${vid}:${pid}|${desc}"
+    done < <(lsusb | grep -i "hub" | grep -v "root hub")
+}
+
 # ------------------------------------------------------------------------------
 # 2. "BRAIN FART" DETECTION ENGINE (SELF-HEALING SYSTEM DIAGNOSTIC)
 # ------------------------------------------------------------------------------
@@ -459,7 +435,7 @@ EOF
         echo "🧹 Discovered active setup shortcut on Desktop. Cleaning up installer artifacts..."
         rm -f "$installer_desktop"
     fi    
-    echo "✅ Installation routine successfully completed!"
+    echo -e "\n✅ Installation routine successfully completed!"
 }
 
 run_uninstall_routine() {
@@ -486,7 +462,7 @@ run_uninstall_routine() {
     rm -rf "/home/deck/.config/systemd/user-sleep/"
     rm -f "/home/deck/Desktop/DockWakeManager.desktop"
     
-    echo "✅ System environment cleanly restored to factory state!"
+    echo -e "\n✅ System environment cleanly restored to factory state!"
 }
 
 execute_timer_config() {
@@ -559,7 +535,6 @@ execute_hub_wizard() {
         return
     fi
 
-    # Secure internal memory authorization check directly inside surface execution ring
     get_root_credentials
 
     local chosen_hubs=$(zenity --list --checklist --title="Hardware Discovery Wizard" \
@@ -612,4 +587,7 @@ EOF
     fi
 }
 
-show_main_menu
+# Safeguard check to ensure that sub-invocations inside Konsole process their targeted engine payload only
+if [[ "${1}" != "run_install_routine" && "${1}" != "run_uninstall_routine" ]]; then
+    show_main_menu
+fi
