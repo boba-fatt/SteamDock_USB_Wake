@@ -1,10 +1,18 @@
-```bash
 [Desktop Entry]
-Name=Install Dock Wake Manager
-Comment=Launcher for the SteamOS Dock Wake Utility Control Panel
-Exec=curl -sSL https://bit.ly/3QZbWWh -o /tmp/manage_dock.sh && chmod +x /tmp/manage_dock.sh && /tmp/manage_dock.sh
-Icon=utilities-terminal
-Terminal=true
-Type=Application
 Categories=Utility;
-```
+Comment[en_US]=One-Click Installer for Steam Deck USB Hub Wake Shields
+Comment=One-Click Installer for Steam Deck USB Hub Wake Shields
+Exec=bash -c 'curl -sSL https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/${TARGET_BRANCH:-main}/manage_dock.sh -o /tmp/manage_dock.sh && chmod +x /tmp/manage_dock.sh && BRANCH_NAME=main /tmp/manage_dock.sh'
+GenericName[en_US]=
+GenericName=
+Icon=system-software-update
+MimeType=
+Name[en_US]=Install Dock Wake Manager
+Name=Install Dock Wake Manager
+Path=
+StartupNotify=true
+Terminal=true
+TerminalOptions=
+Type=Application
+X-KDE-SubstituteUID=false
+X-KDE-Username=
