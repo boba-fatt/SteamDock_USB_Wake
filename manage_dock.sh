@@ -192,9 +192,9 @@ run_install_routine() {
         preserved_delay=$(get_config_value "sleep_buffer_seconds")
         [ -z "$preserved_delay" ] && preserved_delay=10
 
-        # Read your customized registration targets out of the live file buffer
+    # Read your customized registration targets out of the live file buffer
         while read -r entry; do
-            if [[ -n "$entry" && "$entry" != "#" * ]]; then
+            if [[ -n "$entry" && "$entry" != "#"* ]]; then
                 preserved_hubs+=("$entry")
             fi
         done < <(sed -n '/\[MANAGED_HUBS\]/,$p' "$CONFIG_FILE" | tail -n +2)
