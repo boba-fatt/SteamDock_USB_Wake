@@ -276,7 +276,7 @@ show_main_menu() {
             hardware_report="${hardware_report}     No active external USB hubs plugged in.\n"
         fi
 
-        # Step C: Any keys left over in our map are verified Offline Global Targets
+        # Step C: Any keys left over in our map are verified Offline  Targets
         hardware_report="${hardware_report}\n<span font_family='monospace' font_size='small'>🌐 ROAMING GLOBAL REGISTRY</span>"
         local offline_count=0
         for offline_id in "${!registered_hubs_map[@]}"; do
@@ -287,9 +287,9 @@ show_main_menu() {
         done
 
         if [ $offline_count -eq 0 ] && [ $global_total -eq 0 ]; then
-            hardware_report="${hardware_report}     No roaming profiles built into global registry database yet.\n"
+            hardware_report="${hardware_report}     No roaming profiles built into global registry database yet."
         elif [ $offline_count -eq 0 ]; then
-            hardware_report="${hardware_report}     All registered global targets are currently online.\n"
+            hardware_report="${hardware_report}     All registered global targets are currently online."
         fi
 
         # Audit immutable system-level paths to verify update damage
@@ -329,7 +329,7 @@ show_main_menu() {
             echo "<b>🔌 ECOSYSTEM HARDWARE MONITOR</b>"
             echo "<span font_family='monospace' font_size='small'>    ID            DEVICE DESCRIPTION                 STATUS</span>"
             echo "────────────────────────────────────────────────────────────"
-            echo "<span font_family='monospace' font_size='small'>${hardware_report}</span>"
+            echo "<span font_family='monospace' font_size='small'>${hardware_report%\n}</span>"
             echo "────────────────────────────────────────────────────────────"
         )
         
