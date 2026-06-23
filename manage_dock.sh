@@ -568,7 +568,8 @@ execute_hub_wizard() {
         done
 
         if [ "$count" -gt 0 ]; then
-            echo "$udev_buffer" | echo "$PASS" | sudo -S tee "$UDEV_PATH" > /dev/null
+            # FIX: Direct standard input feeding ensures udev strings land safely without password string bleeding
+            echo "$udev_buffer" | sudo -S tee "$UDEV_PATH" > /dev/null <<< "$PASS"
         else
             sudo -S tee "$UDEV_PATH" > /dev/null <<< "$PASS" << 'EOF'
 #Initialized
@@ -583,5 +584,4 @@ EOF
         zenity --info --text="Successfully synchronized tracking matrices ($count active targets)!" --timeout=2
     fi
 }
-
 show_main_menu
