@@ -153,8 +153,8 @@ execute_with_log() {
     local window_title="$1"
     local routine_function="$2"
 
-    # Execute the passed function name and pipe its live echo lines to Zenity
-    $routine_function | zenity --text-info \
+    # FIX: Using direct command execution evaluation so function memory profiles pass cleanly down the pipeline
+    eval "$routine_function" | zenity --text-info \
         --title="$window_title" \
         --width=520 --height=300 \
         --font_family="monospace" \
@@ -276,8 +276,9 @@ show_main_menu() {
             hardware_report="${hardware_report}     No active external USB hubs plugged in.\n"
         fi
 
-        # Step C: Any keys left over in our map are verified Offline  Targets
-        hardware_report="${hardware_report}\n<span font_family='monospace' font_size='small'>🌐 ROAMING GLOBAL REGISTRY</span>"
+        # Step C: Any keys left over in our map are verified Offline Targets
+        # FIX: Added missing \n directly onto the string end to fix column alignment stacking
+        hardware_report="${hardware_report}\n<span font_family='monospace' font_size='small'>🌐 ROAMING GLOBAL REGISTRY</span>\n"
         local offline_count=0
         for offline_id in "${!registered_hubs_map[@]}"; do
             local offline_desc="${registered_hubs_map[$offline_id]}"
@@ -345,7 +346,7 @@ show_main_menu() {
             menu_options+=("Install Core Utility Suite")
         fi
 
-            CHOICE=$(zenity --list \
+        CHOICE=$(zenity --list \
             --title="Steam Deck Dock Wake Manager" \
             --text="$status_text" \
             --column="Available Action Routines" "${menu_options[@]}" \
