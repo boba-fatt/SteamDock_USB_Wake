@@ -23,11 +23,9 @@ zenity() {
 # ------------------------------------------------------------------------------
 
 verify_system_password_exists() {
-    # Check if the deck user can escalate or if the account password status is blank/locked
     if ! echo "testing_privileges" | sudo -S -v &>/dev/null; then
         if passwd -S deck 2>/dev/null | grep -E -q "L|NP"; then
             
-            # Explicit, beginner-friendly informational warning block
             local message_text=$(
                 echo "<b>⚠️ Administrator Password Required</b>"
                 echo ""
@@ -49,13 +47,9 @@ verify_system_password_exists() {
                 --height=420 --width=520)
             
             if [ $? -eq 0 ]; then
-                # Friendly instructional step right before firing off the terminal context window
                 zenity --info --text="A terminal window will now pop up to let you create your password.\n\nPlease type your new password twice, pressing Enter after each time.\n\n⚠️ <b>NOTE:</b> The terminal will NOT show characters or asterisks while you are typing for privacy security! Just type it out blindly and hit Enter." --width=450
-                
-                # Spawn an active Konsole frame running the secure native Linux passwd pipeline
                 konsole --noclose -e "passwd"
                 
-                # Double-check state tracking loops to see if they completed it or just killed the tab
                 if passwd -S deck 2>/dev/null | grep -E -q "L|NP"; then
                     zenity --error --text="Password setup was not detected. The utility will now close."
                     exit 1
@@ -68,24 +62,20 @@ verify_system_password_exists() {
 }
 
 get_root_credentials() {
-    # Run the pre-flight safety check first to protect inexperienced users
     verify_system_password_exists
 
-    # If we are already root, skip the prompt sequence entirely
     if [ "$EUID" -ne 0 ] && [ -z "$PASS" ]; then
         if command -v zenity &> /dev/null; then
-            PASS=$(zenity --password --title="Authentication Required" --text="SteamOS Dock Wake Utility needs administrator privileges to update udev rules.")
+            PASS=$(zenity --password --title="Authentication Required" --text="SteamOS Dock Wake Utility needs administrator privileges.")
             
             if [ -z "$PASS" ]; then
                 zenity --error --text="Operation cancelled. Administrator privileges are required."
                 exit 1
             fi
             
-            # Verify the typed credentials against the live sudo engine
             echo "$PASS" | sudo -S -v &>/dev/null
             if [ $? -ne 0 ]; then
                 zenity --error --text="Incorrect password. Please run the script again."
-                # Clear out the unverified variable cache to avoid stuck loop hooks
                 unset PASS
                 exit 1
             fi
@@ -153,8 +143,11 @@ execute_with_log() {
     local window_title="$1"
     local routine_function="$2"
 
-    # FIX: Using direct command execution evaluation so function memory profiles pass cleanly down the pipeline
-    eval "$routine_function" | zenity --text-info \
+    # FIX A: Secure root token verification in parent scope BEFORE pipeline fork execution
+    get_root_credentials
+
+    # FIX B: Pass parent authenticated tokens down the pipe manually so background engines process cleanly
+    ( export PASS="$PASS"; $routine_function ) | zenity --text-info \
         --title="$window_title" \
         --width=520 --height=300 \
         --font_family="monospace" \
@@ -167,8 +160,6 @@ reload_udev_subsystem() {
 }
 
 query_live_hardware() {
-    # Populates a structured local hardware manifest list from live active USB paths
-    # Output format line string: "VID:PID|Clean Truncated Description"
     while read -r line; do
         local vid=$(echo "$line" | awk '{print $6}' | cut -d':' -f1)
         local pid=$(echo "$line" | awk '{print $6}' | cut -d':' -f2)
@@ -232,13 +223,11 @@ show_main_menu() {
             is_installed=true
         fi
 
-        # Compute Two-Tiered Hardware Topology and Device State Readouts
         local local_total=0
         local local_registered=0
         local global_total=0
         local hardware_report=""
 
-        # Step A: Load your Saved Global Registry database mappings into memory
         local -A registered_hubs_map
         if [ -f "$CONFIG_FILE" ]; then
             while read -r entry; do
@@ -251,7 +240,6 @@ show_main_menu() {
             done < <(sed -n '/\[MANAGED_HUBS\]/,$p' "$CONFIG_FILE" | tail -n +2)
         fi
 
-        # Step B: Scan Live Hardware Layer & Check against the map
         hardware_report="${hardware_report}<span font_family='monospace' font_size='small'>⚡ LOCAL ACTIVE PLUGS</span>\n"
         while read -r live_hub; do
             [ -z "$live_hub" ] && continue
@@ -262,7 +250,6 @@ show_main_menu() {
             local formatted_row=""
             if [ "$is_installed" = true ] && [ -n "${registered_hubs_map[$current_id]}" ]; then
                 ((local_registered++))
-                # Remove this target from the tracking map so we know what is left over/offline later
                 unset registered_hubs_map["$current_id"]
                 formatted_row=$(printf "%-13s %-34s <span foreground='green'>- Active</span>" "$current_id" "$current_desc")
                 hardware_report="${hardware_report}   • ${formatted_row}\n"
@@ -276,8 +263,6 @@ show_main_menu() {
             hardware_report="${hardware_report}     No active external USB hubs plugged in.\n"
         fi
 
-        # Step C: Any keys left over in our map are verified Offline Targets
-        # FIX: Added missing \n directly onto the string end to fix column alignment stacking
         hardware_report="${hardware_report}\n<span font_family='monospace' font_size='small'>🌐 ROAMING GLOBAL REGISTRY</span>\n"
         local offline_count=0
         for offline_id in "${!registered_hubs_map[@]}"; do
@@ -293,7 +278,6 @@ show_main_menu() {
             hardware_report="${hardware_report}     All registered global targets are currently online."
         fi
 
-        # Audit immutable system-level paths to verify update damage
         local udev_status="<span foreground='orange'>- missing / needs repaired</span>"
         local sudo_status="<span foreground='orange'>- missing / needs repaired</span>"
         [ -f "$SUDO_ERS" ] && sudo_status="<span foreground='green'>- installed</span>"
@@ -310,7 +294,6 @@ show_main_menu() {
         local formatted_udev_path=$(printf "%-${path_width}s" "$UDEV_PATH")
         local formatted_sudo_path=$(printf "%-${path_width}s" "$SUDO_ERS")
 
-        # Synthesize Main Interface Readout Block (Using wrapped stream redirection)
         status_text=$(
             echo "<b>🛡️ SYSTEM STATUS PROFILE</b>"
             echo "────────────────────────────────────────────────────────────"
@@ -334,7 +317,6 @@ show_main_menu() {
             echo "────────────────────────────────────────────────────────────"
         )
         
-        # Create the Dynamic menu options
         local menu_options=()
         if [ "$is_installed" = true ]; then
             if [ "$FRESHLY_INSTALLED" = true ]; then
@@ -346,6 +328,7 @@ show_main_menu() {
             menu_options+=("Install Core Utility Suite")
         fi
 
+        # FIX C: Split window initialization patterns so the main window stays anchored in background spaces
         CHOICE=$(zenity --list \
             --title="Steam Deck Dock Wake Manager" \
             --text="$status_text" \
@@ -353,7 +336,6 @@ show_main_menu() {
             --height=740 --width=650 \
             --ok-label="Execute" --cancel-label="Exit Application")
 
-        # If user closes window or hits Cancel, cleanly exit the background thread
         [ $? -ne 0 ] && exit 0
 
         case "$CHOICE" in
@@ -398,7 +380,6 @@ run_install_routine() {
     set_config_value "user_sleep_service_installed" "true"
 
     echo "🔒 Elevating core security access parameters..."
-    get_root_credentials
     unlock_system
 
     echo "📝 Compiling administrative NOPASSWD bypass exceptions..."
@@ -419,7 +400,6 @@ EOF
     echo "🚀 Generating application desktop environment shortcuts..."
     create_desktop_launcher
 
-    # 🧹 HOUSE CLEANING CHECK: Detect and replace the standalone installer shortcut
     local installer_desktop="/home/deck/Desktop/Install_Dock_Wake_Manager.desktop"
     if [ -f "$installer_desktop" ]; then
         echo "🧹 Discovered active setup shortcut on Desktop. Cleaning up installer artifacts..."
@@ -524,6 +504,9 @@ execute_hub_wizard() {
         zenity --error --text="No compatible external USB hubs were discovered attached to the Deck."
         return
     fi
+
+    # Fix: Get authentication context in parent thread before spawning the wizard modal box
+    get_root_credentials
 
     local chosen_hubs=$(zenity --list --checklist --title="Hardware Discovery Wizard" \
         --text="Manage system targets (Pre-registered items are already checked):" \
