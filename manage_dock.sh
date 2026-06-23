@@ -172,81 +172,121 @@ query_live_hardware() {
 # ------------------------------------------------------------------------------
 # 2. "BRAIN FART" DETECTION ENGINE (SELF-HEALING SYSTEM DIAGNOSTIC)
 # ------------------------------------------------------------------------------
-run_diagnostic() {
-    local launcher_path="/home/deck/Desktop/DockWakeManager.desktop"
-    local icon_path="/home/deck/.config/systemd/user-sleep/dock_wake_small.png"
-    local needs_launcher_repair=false
-
-    # --------------------------------------------------------------------------
-    # STATE A: CONFIG INTEGRITY AND RECOVERY (UDEV -> CONFIG SOURCE MATCHING)
-    # --------------------------------------------------------------------------
-    if [ ! -f "$CONFIG_FILE" ]; then
-        # If the configuration file is missing, but a valid udev rule file exists on disk
-        if [ -f "$UDEV_PATH" ] && ! grep -q "#Initialized" "$UDEV_PATH"; then
-            echo "🔧 Discovered active udev policies without an app database. Restoring configuration matrix..."
-            
-            # Fetch a clean template configuration profile first
-            fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
-            
-            # Extract Vendor IDs (idVendor) and Product IDs (idProduct) straight out of the active rules file
-            local vids=($(grep -oP 'ATTRS{idVendor}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
-            local pids=($(grep -oP 'ATTRS{idProduct}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
-            local total_hubs=${#vids[@]}
-
-            if [ "$total_hubs" -gt 0 ]; then
-                set_config_value "total_managed_hubs" "$total_hubs"
-                # Map the raw hardware IDs straight back into the [MANAGED_HUBS] tracker section
-                for ((i=0; i<total_hubs; i++)); do
-                    if [ -n "${vids[$i]}" ] && [ -n "${pids[$i]}" ]; then
-                        # Check to make sure we don't accidentally write duplicate values
-                        if ! grep -q "${vids[$i]}:${pids[$i]}" "$CONFIG_FILE"; then
-                            sed -i "/\[MANAGED_HUBS\]/a ${vids[$i]}:${pids[$i]}|Recovered Hardware Profile" "$CONFIG_FILE"
-                        fi
-                    fi
-                done
-            else
-                set_config_value "total_managed_hubs" "0"
-            fi
-            
-            # Set default buffer baseline since we can't extrapolate the old custom state
-            set_config_value "sleep_buffer_seconds" "10"
-            
-        # If both files are missing, let the normal repository configuration download catch it
-        elif [ -f "$UDEV_PATH" ] || systemctl --user is-enabled dock-wake-shield.service &>/dev/null; then
-            fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
-            set_config_value "total_managed_hubs" "0"
-            set_config_value "sleep_buffer_seconds" "10"
-        fi
-
-        # Sync persistent structural system state indicators
-        if systemctl --user is-enabled dock-wake-shield.service &>/dev/null; then
-            set_config_value "user_sleep_service_installed" "true"
-        fi
-        if [ -f "$UDEV_PATH" ]; then
-            set_config_value "udev_rules_installed" "true"
-        fi
+run_install_routine() {
+    if [[ "$XYZ" =~ "sleep_wake_delay" ]] || [[ "$0" =~ "sleep_wake_delay" ]]; then
+        export REPO_BASE="https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/sleep_wake_delay"
     fi
 
+    echo "=================================================================="
+    echo " 🛡️  SYSTEM REPAIR & MAINTENANCE ENGINE "
+    echo "=================================================================="
+    
+    local preserved_hubs=()
+    local preserved_delay="10"
+
     # --------------------------------------------------------------------------
-    # STATE B: LAUNCHER & ICON INTEGRITY MANAGEMENT (AUTO-CLOSING CONSOLE)
+    # 1. PARSE AND BACKUP EXISTING CONFIG VALUE MATRIX (DO NOT OVERWRITE!)
     # --------------------------------------------------------------------------
     if [ -f "$CONFIG_FILE" ]; then
-        if [ ! -f "$launcher_path" ]; then
-            needs_launcher_repair=true
-        elif [ ! -f "$icon_path" ]; then
-            needs_launcher_repair=true
-        # Verify the launcher matches the clean execution sequence without the restrictive --hold constraints
-        elif ! grep -q "konsole -e" "$launcher_path"; then
-            needs_launcher_repair=true
-        fi
+        echo "💾 Discovered existing configuration database. Backing up preferences..."
+        preserved_delay=$(get_config_value "sleep_buffer_seconds")
+        [ -z "$preserved_delay" ] && preserved_delay=10
 
-        # If any launcher validation fails, quietly download the icon asset and rewrite the configuration rules
-        if [ "$needs_launcher_repair" = true ]; then
-            mkdir -p "/home/deck/.config/systemd/user-sleep"
-            curl -sSL "${REPO_BASE}/assets/dock_wake_small.png" -o "$icon_path" &>/dev/null
-            create_desktop_launcher
-        fi
+        # Read your customized registration targets out of the live file buffer
+        while read -r entry; do
+            if [[ -n "$entry" && "$entry" != "#" * ]]; then
+                preserved_hubs+=("$entry")
+            fi
+        done < <(sed -n '/\[MANAGED_HUBS\]/,$p' "$CONFIG_FILE" | tail -n +2)
+        echo "   -> Successfully preserved ${#preserved_hubs[@]} active hub profiles."
+    else
+        echo "📥 No active configuration discovered. Deploying default profile template..."
+        fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
     fi
+
+    # --------------------------------------------------------------------------
+    # 2. FORCE RE-FETCH STATIC DESKTOP ENV & RUNTIME FILE UPGRADES
+    # --------------------------------------------------------------------------
+    echo "📥 Updating core script assets from repository..."
+    fetch_repo_asset "99_dock_wake_delay.sh" "$RUNTIME_SCRIPT"
+    fetch_repo_asset "dock-wake-shield.service" "$SERVICE_FILE"
+    
+    # Refresh the custom icon graphic directly onto your local drive storage
+    mkdir -p "/home/deck/.config/systemd/user-sleep"
+    curl -sSL "${REPO_BASE}/assets/dock_wake_small.png" -o "/home/deck/.config/systemd/user-sleep/dock_wake_small.png" &>/dev/null
+
+    # --------------------------------------------------------------------------
+    # 3. RECONSTRUCT SYSTEM SERVICE & ADMINISTRATIVE PERMISSIONS
+    # --------------------------------------------------------------------------
+    echo "⚙️ Re-aligning user-space systemd automation profiles..."
+    systemctl --user daemon-reload
+    systemctl --user disable dock-wake-shield.service &>/dev/null
+    systemctl --user enable dock-wake-shield.service
+    
+    echo "🔒 Escalating system administration privilege tokens..."
+    unlock_system
+
+    echo "📝 Validating administrative NOPASSWD bypass rules..."
+    echo "$PASS" | sudo -S tee "$SUDO_ERS" > /dev/null <<'EOF'
+deck ALL=(ALL) NOPASSWD: /home/deck/.config/systemd/user-sleep/99_dock_wake_delay.sh
+EOF
+
+    # --------------------------------------------------------------------------
+    # 4. REBUILD IMMUTABLE HW OVERLAYS USING PRESERVED BASIS DATA
+    # --------------------------------------------------------------------------
+    echo "🛠️ Synthesizing hardware udev configurations..."
+    local udev_buffer=""
+    local count=0
+
+    if [ "${#preserved_hubs[@]}" -gt 0 ]; then
+        for target_line in "${preserved_hubs[@]}"; do
+            local target_id=$(echo "$target_line" | cut -d'|' -f1)
+            local vid=$(echo "$target_id" | cut -d':' -f1)
+            local pid=$(echo "$target_id" | cut -d':' -f2)
+
+            if [ -n "$vid" ] && [ -n "$pid" ]; then
+                udev_buffer="${udev_buffer}SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"$vid\", ATTRS{idProduct}==\"$pid\", ATTR{power/wakeup}=\"enabled\""$'\n'
+                ((count++))
+            fi
+        done
+    fi
+
+    # Direct variable printing avoiding any standard input pipeline data contamination conflicts
+    if [ "$count" -gt 0 ]; then
+        echo "$PASS" | sudo -S sh -c "echo \"$udev_buffer\" > \"$UDEV_PATH\""
+        echo "   -> Restored $count active hub rules to kernel hardware path tables."
+    else
+        echo "$PASS" | sudo -S sh -c "echo '#Initialized' > \"$UDEV_PATH\""
+    fi
+
+    # --------------------------------------------------------------------------
+    # 5. RESTORE USER VALUES AND SYNC RUNTIME CONTEXT
+    # --------------------------------------------------------------------------
+    echo "🔄 Resynchronizing application metadata tables..."
+    # Re-apply structural parameters safely back onto disk template
+    sed -i '/\[MANAGED_HUBS\]/q' "$CONFIG_FILE"
+    set_config_value "sleep_buffer_seconds" "$preserved_delay"
+    set_config_value "total_managed_hubs" "$count"
+    set_config_value "udev_rules_installed" "true"
+    set_config_value "user_sleep_service_installed" "true"
+
+    # Re-append all original preserved hub text line configurations safely back into place
+    for verified_entry in "${preserved_hubs[@]}"; do
+        echo "$verified_entry" >> "$CONFIG_FILE"
+    done
+
+    echo "🔄 Purging kernel hardware memory caching profiles..."
+    reload_udev_subsystem
+    lock_system
+    
+    echo "🚀 Re-linking desktop environment application shortcuts..."
+    create_desktop_launcher
+
+    local installer_desktop="/home/deck/Desktop/Install_Dock_Wake_Manager.desktop"
+    if [ -f "$installer_desktop" ]; then
+        rm -f "$installer_desktop"
+    fi    
+    echo -e "\n✅ Maintenance & Repair routine successfully finished!"
 }
 # ------------------------------------------------------------------------------
 # 3. INTERACTIVE GUI PIPELINE (PERSISTENT APPLICATION LOOP)
