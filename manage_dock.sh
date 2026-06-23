@@ -125,15 +125,10 @@ fetch_repo_asset() {
 }
 
 create_desktop_launcher() {
-    local icon_dir="/home/deck/.config/systemd/user-sleep"
-    local icon_path="${icon_dir}/dock_wake_small.png"
+    local icon_path="/home/deck/.config/systemd/user-sleep/dock_wake_small.png"
     local desktop_launcher="/home/deck/Desktop/DockWakeManager.desktop"
 
-    # 1. Pull the icon asset straight from your repository assets folder
-    mkdir -p "$icon_dir"
-    curl -sSL "${REPO_BASE}/assets/dock_wake_small.png" -o "$icon_path"
-
-    # 2. Build the desktop entry pointing explicitly to your repo icon asset
+    # Build the desktop entry pointing straight to the verified, existing image path
     cat << 'EOF' > "$desktop_launcher"
 [Desktop Entry]
 Name=Dock Wake Manager
@@ -179,6 +174,7 @@ query_live_hardware() {
 # 2. "BRAIN FART" DETECTION ENGINE (SELF-HEALING SYSTEM DIAGNOSTIC)
 # ------------------------------------------------------------------------------
 run_diagnostic() {
+    # Existing "Brain Fart" tracking logic for configuration files
     if [ ! -f "$CONFIG_FILE" ] && { [ -f "$UDEV_PATH" ] || systemctl --user is-enabled dock-wake-shield.service &>/dev/null; }; then
         fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
 
@@ -210,7 +206,26 @@ run_diagnostic() {
         fi
     fi
 
-    if [ -f "$CONFIG_FILE" ] && [ ! -f "/home/deck/Desktop/DockWakeManager.desktop" ]; then
+    # HARDWARE LAUNCHER SELF-HEALING ENGINE
+    local launcher_path="/home/deck/Desktop/DockWakeManager.desktop"
+    local icon_path="/home/deck/.config/systemd/user-sleep/dock_wake_small.png"
+    local needs_repair=false
+
+    # Condition A: The desktop icon file is completely missing
+    if [ ! -f "$launcher_path" ]; then
+        needs_repair=true
+    # Condition B: The shortcut exists, but the physical icon PNG is gone from storage
+    elif [ ! -f "$icon_path" ]; then
+        needs_repair=true
+    # Condition C: The launcher is there, but it doesn't match our current repo link configuration
+    elif ! grep -q "SteamDock_USB_Wake" "$launcher_path"; then
+        needs_repair=true
+    fi
+
+    # If any integrity test fails, download the image and rewrite the shortcut flawlessly
+    if [ "$needs_repair" = true ] && [ -f "$CONFIG_FILE" ]; then
+        mkdir -p "/home/deck/.config/systemd/user-sleep"
+        curl -sSL "${REPO_BASE}/assets/dock_wake_small.png" -o "$icon_path" &>/dev/null
         create_desktop_launcher
     fi
 }
@@ -378,6 +393,10 @@ run_install_routine() {
     fetch_repo_asset "99_dock_wake_delay.sh" "$RUNTIME_SCRIPT"
     fetch_repo_asset "dock-wake-shield.service" "$SERVICE_FILE"
     
+    # FIX: Pre-download the image asset completely so it exists on disk early
+    mkdir -p "/home/deck/.config/systemd/user-sleep"
+    curl -sSL "${REPO_BASE}/assets/dock_wake_small.png" -o "/home/deck/.config/systemd/user-sleep/dock_wake_small.png"
+    
     echo "⚙️ Registering user-space systemd automation profiles..."
     systemctl --user daemon-reload
     systemctl --user disable dock-wake-shield.service &>/dev/null
@@ -414,6 +433,9 @@ EOF
 }
 
 run_uninstall_routine() {
+    echo "=================================================================="
+    echo " 🛡️  CORE SUITE UNINSTALLATION ENGINE "
+    echo "=================================================================="
     echo "🔒 Requesting system administration authorization tokens..."
     unlock_system
 
@@ -434,6 +456,7 @@ run_uninstall_routine() {
     systemctl --user daemon-reload
 
     echo "🧹 Obliterating configuration folders and local tracking databases..."
+    # This scrubs the application directory along with the downloaded icon PNG asset!
     rm -rf "/home/deck/.config/systemd/user-sleep/"
     rm -f "/home/deck/Desktop/DockWakeManager.desktop"
     
