@@ -130,8 +130,8 @@ create_desktop_launcher() {
 [Desktop Entry]
 Name=Dock Wake Manager
 Comment=Manage Steam Deck USB Hub Wake and Sleep Shields
-# FIX: Using hardcoded home target folder paths drops /bin/sh binary shell initialization crash profiles
-Exec=/home/deck/.config/systemd/user-sleep/manage_dock.sh
+# FIX: Spawns Konsole, downloads the raw master script from the repo, and runs it live in memory
+Exec=konsole --hold -e bash -c "curl -sSL https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/main/manage_dock.sh | bash"
 Icon=preferences-system-power
 Terminal=false
 Type=Application
