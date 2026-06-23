@@ -64,12 +64,10 @@ verify_system_password_exists() {
 get_root_credentials() {
     verify_system_password_exists
 
-    # Check if a non-interactive sudo challenge passes right now
     if sudo -n -v &>/dev/null; then
         return 0
     fi
 
-    # Check if a token string matches live authentication boundaries inside active memory
     if [ -n "$PASS" ]; then
         if echo "$PASS" | sudo -S -v &>/dev/null; then
             return 0
@@ -149,40 +147,6 @@ Type=Application
 Categories=Utility;
 EOF
     chmod +x "$desktop_launcher"
-}
-
-execute_with_log() {
-    local window_title="$1"
-    local routine_function="$2"
-
-    # 1. Pull/Verify your Zenity password inside the anchored surface context loop
-    get_root_credentials
-
-    # 2. Fire Konsole, calling the active file directly with environmental variables passed
-    # This prevents flashing or closing issues, keeping your primary logic blocks completely pristine
-    konsole --title="$window_title" -e bash -c "
-        echo '==================================================================';
-        echo ' 🛡️  ${window_title^^} ';
-        echo '==================================================================';
-        echo '';
-        export PASS='$PASS';
-        export CONFIG_FILE='$CONFIG_FILE';
-        export RUNTIME_SCRIPT='$RUNTIME_SCRIPT';
-        export SERVICE_FILE='$SERVICE_FILE';
-        export UDEV_PATH='$UDEV_PATH';
-        export SUDO_ERS='$SUDO_ERS';
-        export TARGET_BRANCH='$TARGET_BRANCH';
-        export REPO_BASE='$REPO_BASE';
-        export FRESHLY_INSTALLED='$FRESHLY_INSTALLED';
-        source '$0';
-        $routine_function;
-        echo '';
-        echo '──────────────────────────────────────────────────────────────────';
-        echo ' Return Key Prompt: Process safely complete.';
-        echo ' Press ANY KEY to return back to the Manager Panel...';
-        echo '──────────────────────────────────────────────────────────────────';
-        read -n 1 -s;
-    "
 }
 
 reload_udev_subsystem() {
@@ -370,7 +334,7 @@ show_main_menu() {
 
         case "$CHOICE" in
             "Install Core Utility Suite" | "Update / Repair Utilities")
-                execute_with_log "Core Suite Setup Engine" run_install_routine
+                run_install_routine
                 [ "$CHOICE" = "Install Core Utility Suite" ] && export FRESHLY_INSTALLED=true
                 ;;
             *"Scan & Register Hubs")
@@ -380,7 +344,7 @@ show_main_menu() {
                 execute_timer_config
                 ;;
             "Completely Uninstall Suite")
-                execute_with_log "Core Suite Uninstallation Engine" run_uninstall_routine
+                run_uninstall_routine
                 export FRESHLY_INSTALLED=false
                 ;;
             *)
@@ -398,6 +362,9 @@ run_install_routine() {
         export REPO_BASE="https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/sleep_wake_delay"
     fi
 
+    echo "=================================================================="
+    echo " 🛡️  CORE SUITE SETUP ENGINE "
+    echo "=================================================================="
     echo "📥 Fetching structural application databases from repository..."
     fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
     fetch_repo_asset "99_dock_wake_delay.sh" "$RUNTIME_SCRIPT"
@@ -439,6 +406,9 @@ EOF
 }
 
 run_uninstall_routine() {
+    echo "=================================================================="
+    echo " 🛡️  CORE SUITE UNINSTALLATION ENGINE "
+    echo "=================================================================="
     echo "🔒 Requesting system administration authorization tokens..."
     unlock_system
 
@@ -587,7 +557,4 @@ EOF
     fi
 }
 
-# Safeguard check to ensure that sub-invocations inside Konsole process their targeted engine payload only
-if [[ "${1}" != "run_install_routine" && "${1}" != "run_uninstall_routine" ]]; then
-    show_main_menu
-fi
+show_main_menu
