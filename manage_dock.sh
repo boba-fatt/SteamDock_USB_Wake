@@ -173,56 +173,79 @@ query_live_hardware() {
 # 2. "BRAIN FART" DETECTION ENGINE (SELF-HEALING SYSTEM DIAGNOSTIC)
 # ------------------------------------------------------------------------------
 run_diagnostic() {
-    # Existing "Brain Fart" tracking logic for configuration files
-    if [ ! -f "$CONFIG_FILE" ] && { [ -f "$UDEV_PATH" ] || systemctl --user is-enabled dock-wake-shield.service &>/dev/null; }; then
-        fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
+    local launcher_path="/home/deck/Desktop/DockWakeManager.desktop"
+    local icon_path="/home/deck/.config/systemd/user-sleep/dock_wake_small.png"
+    local needs_launcher_repair=false
 
+    # --------------------------------------------------------------------------
+    # STATE A: CONFIG INTEGRITY AND RECOVERY (UDEV -> CONFIG SOURCE MATCHING)
+    # --------------------------------------------------------------------------
+    if [ ! -f "$CONFIG_FILE" ]; then
+        # If the configuration file is missing, but a valid udev rule file exists on disk
+        if [ -f "$UDEV_PATH" ] && ! grep -q "#Initialized" "$UDEV_PATH"; then
+            echo "🔧 Discovered active udev policies without an app database. Restoring configuration matrix..."
+            
+            # Fetch a clean template configuration profile first
+            fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
+            
+            # Extract Vendor IDs (idVendor) and Product IDs (idProduct) straight out of the active rules file
+            local vids=($(grep -oP 'ATTRS{idVendor}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
+            local pids=($(grep -oP 'ATTRS{idProduct}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
+            local total_hubs=${#vids[@]}
+
+            if [ "$total_hubs" -gt 0 ]; then
+                set_config_value "total_managed_hubs" "$total_hubs"
+                # Map the raw hardware IDs straight back into the [MANAGED_HUBS] tracker section
+                for ((i=0; i<total_hubs; i++)); do
+                    if [ -n "${vids[$i]}" ] && [ -n "${pids[$i]}" ]; then
+                        # Check to make sure we don't accidentally write duplicate values
+                        if ! grep -q "${vids[$i]}:${pids[$i]}" "$CONFIG_FILE"; then
+                            sed -i "/\[MANAGED_HUBS\]/a ${vids[$i]}:${pids[$i]}|Recovered Hardware Profile" "$CONFIG_FILE"
+                        fi
+                    fi
+                done
+            else
+                set_config_value "total_managed_hubs" "0"
+            fi
+            
+            # Set default buffer baseline since we can't extrapolate the old custom state
+            set_config_value "sleep_buffer_seconds" "10"
+            
+        # If both files are missing, let the normal repository configuration download catch it
+        elif [ -f "$UDEV_PATH" ] || systemctl --user is-enabled dock-wake-shield.service &>/dev/null; then
+            fetch_repo_asset "dock_wake.conf" "$CONFIG_FILE"
+            set_config_value "total_managed_hubs" "0"
+            set_config_value "sleep_buffer_seconds" "10"
+        fi
+
+        # Sync persistent structural system state indicators
         if systemctl --user is-enabled dock-wake-shield.service &>/dev/null; then
             set_config_value "user_sleep_service_installed" "true"
         fi
-
         if [ -f "$UDEV_PATH" ]; then
-            if grep -q "#Initialized" "$UDEV_PATH"; then
-                set_config_value "udev_rules_installed" "true"
-                set_config_value "total_managed_hubs" "0"
-            else
-                set_config_value "udev_rules_installed" "true"
-                local vids=($(grep -oP 'ATTRS{idVendor}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
-                local pids=($(grep -oP 'ATTRS{idProduct}=="\K[^" ]+' "$UDEV_PATH" 2>/dev/null))
-                local total_hubs=${#vids[@]}
-
-                if [ "$total_hubs" -gt 0 ]; then
-                    set_config_value "total_managed_hubs" "$total_hubs"
-                    for ((i=0; i<total_hubs; i++)); do
-                        if [ -n "${vids[$i]}" ] && [ -n "${pids[$i]}" ]; then
-                            sed -i "/\[MANAGED_HUBS\]/a ${vids[$i]}:${pids[$i]}" "$CONFIG_FILE"
-                        fi
-                    done
-                else
-                    set_config_value "total_managed_hubs" "0"
-                fi
-            fi
+            set_config_value "udev_rules_installed" "true"
         fi
     fi
 
-    # HARDWARE LAUNCHER SELF-HEALING ENGINE
-    local launcher_path="/home/deck/Desktop/DockWakeManager.desktop"
-    local icon_path="/home/deck/.config/systemd/user-sleep/dock_wake_small.png"
-    local needs_repair=false
+    # --------------------------------------------------------------------------
+    # STATE B: LAUNCHER & ICON INTEGRITY MANAGEMENT (AUTO-CLOSING CONSOLE)
+    # --------------------------------------------------------------------------
+    if [ -f "$CONFIG_FILE" ]; then
+        if [ ! -f "$launcher_path" ]; then
+            needs_launcher_repair=true
+        elif [ ! -f "$icon_path" ]; then
+            needs_launcher_repair=true
+        # Verify the launcher matches the clean execution sequence without the restrictive --hold constraints
+        elif ! grep -q "konsole -e" "$launcher_path"; then
+            needs_launcher_repair=true
+        fi
 
-    if [ ! -f "$launcher_path" ]; then
-        needs_repair=true
-    elif [ ! -f "$icon_path" ]; then
-        needs_repair=true
-    # FIX: Checked against the clean execution pipeline without the --hold constraint
-    elif ! grep -q "konsole -e" "$launcher_path"; then
-        needs_repair=true
-    fi
-
-    if [ "$needs_repair" = true ] && [ -f "$CONFIG_FILE" ]; then
-        mkdir -p "/home/deck/.config/systemd/user-sleep"
-        curl -sSL "${REPO_BASE}/assets/dock_wake_small.png" -o "$icon_path" &>/dev/null
-        create_desktop_launcher
+        # If any launcher validation fails, quietly download the icon asset and rewrite the configuration rules
+        if [ "$needs_launcher_repair" = true ]; then
+            mkdir -p "/home/deck/.config/systemd/user-sleep"
+            curl -sSL "${REPO_BASE}/assets/dock_wake_small.png" -o "$icon_path" &>/dev/null
+            create_desktop_launcher
+        fi
     fi
 }
 # ------------------------------------------------------------------------------
