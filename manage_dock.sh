@@ -162,24 +162,10 @@ execute_with_log() {
 
     # 2. Build a standalone, self-cleaning temporary worker script for Konsole execution
     local temp_exec="/tmp/dock_wake_worker.sh"
-    cat << 'EOF' > "$temp_exec"
-#!/usr/bin/env bash
-echo "=================================================================="
-echo " 🛡️  ${window_title^^} "
-echo "=================================================================="
-echo ""
-
-# Pass down verified variables into worker execution environment
-export PASS="$PASS"
-export CONFIG_FILE="$CONFIG_FILE"
-export RUNTIME_SCRIPT="$RUNTIME_SCRIPT"
-export SERVICE_FILE="$SERVICE_FILE"
-export UDEV_PATH="$UDEV_PATH"
-export SUDO_ERS="$SUDO_ERS"
-export TARGET_BRANCH="$TARGET_BRANCH"
-export REPO_BASE="$REPO_BASE"
-
-# Inject necessary helper functions so the subshell environment stays fully mapped
+    
+    # Capture all function structures into memory variables first
+    local core_helpers
+    core_helpers=$(cat << HELPERS
 $(typeset -f get_root_credentials)
 $(typeset -f verify_system_password_exists)
 $(typeset -f unlock_system)
@@ -188,44 +174,56 @@ $(typeset -f reload_udev_subsystem)
 $(typeset -f fetch_repo_asset)
 $(typeset -f set_config_value)
 $(typeset -f create_desktop_launcher)
+HELPERS
+)
 
-# Inject the targeted functional payload
-$(typeset -f "$routine_function")
+    local target_payload
+    target_payload=$(typeset -f "$routine_function")
 
-# Run the routine function directly in the terminal view context
+    # 3. Assemble the worker template using a clean double-quoted string assignment
+    # GitHub's editor will color-code this perfectly because it sees explicit open/close quotes.
+    local worker_template=""
+    worker_template="#!/usr/bin/env bash
+echo \"==================================================================\"
+echo \" 🛡️  ${window_title^^} \"
+echo \"==================================================================\"
+echo \"\"
+
+export PASS=\"$PASS\"
+export CONFIG_FILE=\"$CONFIG_FILE\"
+export RUNTIME_SCRIPT=\"$RUNTIME_SCRIPT\"
+export SERVICE_FILE=\"$SERVICE_FILE\"
+export UDEV_PATH=\"$UDEV_PATH\"
+export SUDO_ERS=\"$SUDO_ERS\"
+export TARGET_BRANCH=\"$TARGET_BRANCH\"
+export REPO_BASE=\"$REPO_BASE\"
+
+# Inject function frameworks
+$core_helpers
+
+$target_payload
+
+# Run payload
 $routine_function
 
-echo ""
-echo "──────────────────────────────────────────────────────────────────"
-echo " Return Key Prompt: Process safely complete."
-echo " Press ANY KEY to return back to the Manager Panel..."
-echo "──────────────────────────────────────────────────────────────────"
+echo \"\"
+echo \"──────────────────────────────────────────────────────────────────\"
+echo \" Return Key Prompt: Process safely complete.\"
+echo \" Press ANY KEY to return back to the Manager Panel...\"
+echo \"──────────────────────────────────────────────────────────────────\"
 read -n 1 -s
-EOF
+"
+
+    # 4. Write the verified template cleanly to disk
+    echo "$worker_template" > "$temp_exec"
     chmod +x "$temp_exec"
 
-    # 3. Spawn a clean, modular command process tab over top of the parent screen
+    # 5. Spawn a clean, modular command process tab over top of the parent screen
     konsole --title="$window_title" -e "$temp_exec"
     
-    # 4. Clean up worker footprints instantly
+    # 6. Clean up worker footprints instantly
     rm -f "$temp_exec"
 }
-
-reload_udev_subsystem() {
-    echo "🔄 Refreshing active Linux kernel hardware tracking sub-routines..."
-    echo "$PASS" | sudo -S udevadm control --reload-rules && echo "$PASS" | sudo -S udevadm trigger
-}
-
-query_live_hardware() {
-    while read -r line; do
-        local vid=$(echo "$line" | awk '{print $6}' | cut -d':' -f1)
-        local pid=$(echo "$line" | awk '{print $6}' | cut -d':' -f2)
-        local raw_desc=$(echo "$line" | cut -d' ' -f7-)
-        local desc="${raw_desc:0:32}"
-        echo "${vid}:${pid}|${desc}"
-    done < <(lsusb | grep -i "hub" | grep -v "root hub")
-}
-
 # ------------------------------------------------------------------------------
 # 2. "BRAIN FART" DETECTION ENGINE (SELF-HEALING SYSTEM DIAGNOSTIC)
 # ------------------------------------------------------------------------------
