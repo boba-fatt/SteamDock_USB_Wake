@@ -433,8 +433,7 @@ run_uninstall_routine() {
     reload_udev_subsystem
 
     echo "🗑️ Dropping sudoers privilege exception layers..."
-    # FIX: Explicit path target ensures the file is vaporized regardless of subshell environment scope
-    echo "$PASS" | sudo -S rm -f "/etc/sudoers.d/dock-wake-shield"
+    echo "$PASS" | sudo -S rm -f "$SUDO_ERS"
 
     lock_system
 
