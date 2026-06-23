@@ -585,7 +585,7 @@ execute_hub_wizard() {
         fi
 
         # Wipe old files to build cleanly from scratch
-        sudo -S rm -f "$UDEV_PATH" <<< "$PASS"
+        echo "$PASS" | sudo -S rm -f "$UDEV_PATH" &>/dev/null
         sed -i '/\[MANAGED_HUBS\]/q' "$CONFIG_FILE"
 
         local count=0
@@ -602,15 +602,12 @@ execute_hub_wizard() {
             echo "✅ ACTIVE: ${target} (${metadata})"
             ((count++))
         done
-
         # Write updates cleanly to system overlays using direct string inputs now because I am an idiot
         if [ "$count" -gt 0 ]; then
-            echo "$udev_buffer" | sudo -S tee "$UDEV_PATH" > /dev/null <<< "$PASS"
+            echo "$PASS" | sudo -S sh -c "echo \"$udev_buffer\" > \"$UDEV_PATH\""
         else
             echo "⚠️  All targets unselected. Rules file reset to factory defaults."
-            sudo -S tee "$UDEV_PATH" > /dev/null <<< "$PASS" << 'EOF'
-#Initialized
-EOF
+            echo "$PASS" | sudo -S sh -c "echo '#Initialized' > \"$UDEV_PATH\""
         fi
 
         set_config_value "total_managed_hubs" "$count"
