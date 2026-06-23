@@ -30,6 +30,7 @@ Forget messy terminal commands or confusing text files. This manager features a 
 You don't need any prior Linux experience to get this running. Switch your Steam Deck to **Desktop Mode** and choose the method that makes you most comfortable:
 
 ### Method 1: The Downloadable Shortcut Shortcut (Easiest)
+
 ```mermaid
 graph TD
     A([**Download File**]) -->|Save to Desktop| B(**Double-Click File**)
@@ -40,7 +41,8 @@ graph TD
     F --> G[Check 'Is executable']
     G --> H(**Double-Click File** Again)
     H --> D
- ```   
+```
+  
 - ***Download:*** Click to download the [`Install_Dock_Wake_Manager.desktop`](https://github.com/boba-fatt/SteamDock_USB_Wake/releases/download/v1.0.1/Install_Dock_Wake_Manager.desktop) file from the latest release and save it straight onto your Steam Deck's **Desktop**.
 - ***Run:*** Double-click the file and click **Execute** (or *Trust* if prompted). The launcher will handle the initial repository asset pull and fire up your control panel instantly!
 - ***Enable Permissions:*** Right-click the downloaded icon on your desktop, select **Properties**, go to the **Permissions** tab, and check the box that says **"Is executable"**.
