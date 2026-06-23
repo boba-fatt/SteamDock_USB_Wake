@@ -535,28 +535,63 @@ execute_hub_wizard() {
     get_root_credentials
 
     local chosen_hubs=$(zenity --list --checklist --title="Hardware Discovery Wizard" \
-        --text="Manage system targets (Pre-registered items are already checked):" \
+        --text="Manage system targets (Pre-registered items are already checked):\n\n🖥️ Monitor the background terminal to view sync operations live!" \
         --column="Monitor" --column="Hardware ID" --column="Device Description" \
         "${usb_list[@]}" --height=400 --width=540)
 
-    if [ -n "$chosen_hubs" ]; then
+    # Capture the exit status immediately (User pressed OK)
+    if [ $? -eq 0 ]; then
+        echo ""
+        echo "=================================================================="
+        echo " 🔌 SYNCING HARDWARE TRACKING MATRICES..."
+        echo "=================================================================="
+        
         unlock_system
-        echo "$PASS" | sudo -S rm -f "$UDEV_PATH"
-        sed -i '/\[MANAGED_HUBS\]/q' "$CONFIG_FILE"
-
-        local IFS='|'
-        local count=0
-        local udev_buffer=""
+        
+        # Parse the Zenity output string safely into an array by temporary splitting on '|'
         local final_targets=()
-
         if [[ "$chosen_hubs" == *"ALL_HUBS"* ]]; then
             final_targets=("${raw_hubs[@]}")
         else
+            # Zenity returns "ID1|ID2|ID3". We temporarily switch IFS to map into array safely
+            local OIFS="$IFS"
+            IFS='|'
             for entry in $chosen_hubs; do
-                [ "$entry" != "ALL_HUBS" ] && final_targets+=("$entry")
+                if [[ -n "$entry" && "$entry" != "ALL_HUBS" ]]; then
+                    final_targets+=("$entry")
+                fi
             done
+            IFS="$OIFS"
         fi
 
+        # Track the active targets inside local memory maps for delta reporting
+        local -A selected_map
+        for t in "${final_targets[@]}"; do
+            selected_map["$t"]=1
+        done
+
+        # TELEMETRY LOGGING: Report what is actively being removed from the existing tracking stacks on stacks on stacks
+        echo "🔍 Auditing profile modifications..."
+        if [ -f "$CONFIG_FILE" ]; then
+            while read -r entry; do
+                if [[ -n "$entry" && "$entry" != "#"* ]]; then
+                    local old_id=$(echo "$entry" | cut -d'|' -f1)
+                    local old_desc=$(echo "$entry" | cut -d'|' -f2)
+                    if [ -z "${selected_map[$old_id]}" ]; then
+                        echo "❌ PURGED: ${old_id} (${old_desc})"
+                    fi
+                fi
+            done < <(sed -n '/\[MANAGED_HUBS\]/,$p' "$CONFIG_FILE" | tail -n +2)
+        fi
+
+        # Wipe old files to build cleanly from scratch
+        sudo -S rm -f "$UDEV_PATH" <<< "$PASS"
+        sed -i '/\[MANAGED_HUBS\]/q' "$CONFIG_FILE"
+
+        local count=0
+        local udev_buffer=""
+
+        # Recompile entries and report what is being added or retained... Jacob doesn't touch it!
         for target in "${final_targets[@]}"; do
             local vid=$(echo "$target" | cut -d':' -f1)
             local pid=$(echo "$target" | cut -d':' -f2)
@@ -564,13 +599,15 @@ execute_hub_wizard() {
 
             udev_buffer="${udev_buffer}SUBSYSTEM==\"usb\", ATTRS{idVendor}==\"$vid\", ATTRS{idProduct}==\"$pid\", ATTR{power/wakeup}=\"enabled\""$'\n'
             echo "${target}|${metadata}" >> "$CONFIG_FILE"
+            echo "✅ ACTIVE: ${target} (${metadata})"
             ((count++))
         done
 
+        # Write updates cleanly to system overlays using direct string inputs now because I am an idiot
         if [ "$count" -gt 0 ]; then
-            # FIX: Direct standard input feeding ensures udev strings land safely without password string bleeding
             echo "$udev_buffer" | sudo -S tee "$UDEV_PATH" > /dev/null <<< "$PASS"
         else
+            echo "⚠️  All targets unselected. Rules file reset to factory defaults."
             sudo -S tee "$UDEV_PATH" > /dev/null <<< "$PASS" << 'EOF'
 #Initialized
 EOF
@@ -581,7 +618,15 @@ EOF
 
         reload_udev_subsystem
         lock_system
+        
+        echo "──────────────────────────────────────────────────────────────────"
+        echo " Matrix synchronization successfully locked ($count active targets)!"
+        echo "=================================================================="
+        echo ""
+        
         zenity --info --text="Successfully synchronized tracking matrices ($count active targets)!" --timeout=2
+    else
+        echo "⚠️ Sync routine aborted by user choice."
     fi
 }
 show_main_menu
