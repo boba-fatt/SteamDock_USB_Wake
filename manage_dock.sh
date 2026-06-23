@@ -134,8 +134,7 @@ create_desktop_launcher() {
 Name=Dock Wake Manager
 Comment=Manage Steam Deck USB Hub Wake and Sleep Shields
 Exec=konsole --hold -e bash -c "curl -sSL https://raw.githubusercontent.com/boba-fatt/SteamDock_USB_Wake/\${TARGET_BRANCH:-main}/manage_dock.sh | bash"
-Icon=${icon_path}
-Terminal=false
+Icon=/home/deck/.config/systemd/user-sleep/dock_wake_small.pngTerminal=false
 Type=Application
 Categories=Utility;
 EOF
