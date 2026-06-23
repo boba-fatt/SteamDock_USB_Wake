@@ -143,11 +143,16 @@ execute_with_log() {
     local window_title="$1"
     local routine_function="$2"
 
-    # FIX A: Secure root token verification in parent scope BEFORE pipeline fork execution
+    # 1. Secure root credentials on the surface loop first
     get_root_credentials
 
-    # FIX B: Pass parent authenticated tokens down the pipe manually so background engines process cleanly
-    ( export PASS="$PASS"; $routine_function ) | zenity --text-info \
+    # 2. Run the routine function cleanly in the primary shell context
+    # This captures all standard output into a temporary variable log 
+    local log_output
+    log_output=$($routine_function 2>&1)
+
+    # 3. Present the compiled log inside your custom monospace display box
+    echo "$log_output" | zenity --text-info \
         --title="$window_title" \
         --width=520 --height=300 \
         --font_family="monospace" \
