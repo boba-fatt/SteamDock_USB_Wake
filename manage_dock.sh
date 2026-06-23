@@ -300,7 +300,7 @@ show_main_menu() {
             if grep -q "#Initialized" "$UDEV_PATH"; then
                 udev_status="<span foreground='yellow'>- no hubs registered yet</span>"
             else
-                udev_status="<span foreground='green'>- installed & optimized</span>"
+                udev_status="<span foreground='green'>- installed and optimized</span>"
             fi
         fi
 
