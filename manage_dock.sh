@@ -210,18 +210,15 @@ run_diagnostic() {
     local icon_path="/home/deck/.config/systemd/user-sleep/dock_wake_small.png"
     local needs_repair=false
 
-    # Condition A: The desktop icon file is completely missing
     if [ ! -f "$launcher_path" ]; then
         needs_repair=true
-    # Condition B: The shortcut exists, but the physical icon PNG is gone from storage
     elif [ ! -f "$icon_path" ]; then
         needs_repair=true
-    # Condition C: The launcher is there, but it doesn't match our current repo link configuration
-    elif ! grep -q "SteamDock_USB_Wake" "$launcher_path"; then
+    # FIX: Checked against the clean execution pipeline without the --hold constraint
+    elif ! grep -q "konsole -e" "$launcher_path"; then
         needs_repair=true
     fi
 
-    # If any integrity test fails, download the image and rewrite the shortcut flawlessly
     if [ "$needs_repair" = true ] && [ -f "$CONFIG_FILE" ]; then
         mkdir -p "/home/deck/.config/systemd/user-sleep"
         curl -sSL "${REPO_BASE}/assets/dock_wake_small.png" -o "$icon_path" &>/dev/null
