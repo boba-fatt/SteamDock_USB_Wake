@@ -448,10 +448,10 @@ EOF
     fi
 
     if [ "$count" -gt 0 ]; then
-        echo "$PASS" | sudo -S sh -c "echo \"$udev_buffer\" > \"$UDEV_PATH\""
+        echo "$PASS" | sudo -S sh -c 'printf "%s\n" "$1" > "$2"' _ "$udev_buffer" "$UDEV_PATH"
         echo "   -> Restored $count hardware rules cleanly back to kernel tables."
     else
-        echo "$PASS" | sudo -S sh -c "echo '#Initialized' > \"$UDEV_PATH\""
+        echo "$PASS" | sudo -S sh -c 'printf "%s\n" "$1" > "$2"' _ '#Initialized' "$UDEV_PATH"
     fi
 
     echo "🔄 Re-synchronizing configuration application metadata tables..."
@@ -642,10 +642,10 @@ execute_hub_wizard() {
         done
 
         if [ "$count" -gt 0 ]; then
-            echo "$PASS" | sudo -S sh -c "echo \"$udev_buffer\" > \"$UDEV_PATH\""
+            echo "$PASS" | sudo -S sh -c 'printf "%s\n" "$1" > "$2"' _ "$udev_buffer" "$UDEV_PATH"
         else
             echo "⚠️  All targets unselected. Rules file reset to factory defaults."
-            echo "$PASS" | sudo -S sh -c "echo '#Initialized' > \"$UDEV_PATH\""
+            echo "$PASS" | sudo -S sh -c 'printf "%s\n" "$1" > "$2"' _ '#Initialized' "$UDEV_PATH"
         fi
 
         set_config_value "total_managed_hubs" "$count"
