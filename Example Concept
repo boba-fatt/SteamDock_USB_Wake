@@ -1,0 +1,5 @@
+# Usage: markup <style/color> <text>
+# Examples: 
+#   markup bold "System Status" -> <b>System Status</b>
+#   markup green "Active"        -> <span foreground='green'>Active</span>
+#   markup gray "Disconnected"  -> <span foreground='gray'>Disconnected</span>

@@ -186,8 +186,8 @@ run_diagnostic() {
                     local vid=$(echo "$target_id" | cut -d':' -f1)
                     local pid=$(echo "$target_id" | cut -d':' -f2)
                     
-                    if ! grep -q "idVendor==\"$vid\"" "$UDEV_PATH" || \
-                       ! grep -q "idProduct==\"$pid\"" "$UDEV_PATH" || \
+                    if ! grep -q "idVendor}==\"$vid\"" "$UDEV_PATH" || \
+                       ! grep -q "idProduct}==\"$pid\"" "$UDEV_PATH" || \
                        ! grep -q "ATTR{power/control}=\"on\"" "$UDEV_PATH"; then
                         echo "⚠️  Diagnostic Alert: Local udev rules are missing required 'power/control' optimization attributes."
                         system_is_healthy=false
